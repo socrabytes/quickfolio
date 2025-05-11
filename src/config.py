@@ -17,7 +17,7 @@ TEMPLATES_DIR = SRC_DIR / "hugo" / "base_template"
 THEMES_DIR = SRC_DIR / "hugo" / "themes"
 
 # Load environment variables
-env_path = SRC_DIR / ".env"
+env_path = BASE_DIR / ".env" # Load .env from project root
 load_dotenv(dotenv_path=env_path)
 
 # Gemini AI Configuration

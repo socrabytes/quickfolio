@@ -33,13 +33,13 @@ pip install -r requirements.txt
 
 4. **Set up environment variables**
 
-Copy the example environment file:
+Copy the example environment file from the project root:
 
 ```bash
-cp src/.env.example src/.env
+cp .env.example .env
 ```
 
-Edit `src/.env` and add your API keys:
+Edit the `.env` file in the project root and add your API keys:
 
 - Get a free Google Gemini API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
   - No credit card required for the free tier

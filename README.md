@@ -36,8 +36,8 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 # Set up environment variables
-cp src/.env.example src/.env
-# Edit src/.env with your API keys
+cp .env.example .env
+# Edit .env with your API keys
 ```
 
 ### How to Use
@@ -96,7 +96,7 @@ python scripts/test_ai_generator.py path/to/resume_data.json
 │   └── workflow/       # Development processes
 ├── src/
 │   ├── parser/         # Resume parsing
-│   ├── ai/             # OpenAI integration
+│   ├── ai/             # Google Gemini API integration
 │   ├── github/         # OAuth and repo management
 │   ├── hugo/           # Hugo site generator
 │   │   └── themes/     # Tailwind themes
