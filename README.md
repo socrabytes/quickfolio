@@ -76,7 +76,12 @@ To test the portfolio creation wizard:
 1. Start the API server: `python main.py api`
 2. In another terminal, start the web UI: `cd web && npm run dev`
 3. Visit http://localhost:3000 and click "Create Portfolio"
-4. Follow the step-by-step wizard
+4. Follow the step-by-step wizard:
+   - Upload your resume content.
+   - Select a theme from the available options.
+   - Customize your portfolio details.
+   - Preview your site.
+   - Deploy to GitHub.
 
 Currently implemented web features:
 - Resume upload and parsing UI
@@ -158,13 +163,13 @@ web/
 To add a new theme to Quickfolio:
 
 1. Create a new directory in `web/themes/` for your theme (e.g., `web/themes/aurora/`)
-2. Create the following files:
-   - `meta.json`: Theme metadata (name, description, tags)
-   - `preview.tsx`: React component for visual preview
-   - `generator.ts`: Output generator (TOML, HTML, etc.)
-   - `index.ts`: Registration file that imports the above
+2. In your new theme's directory, create the following files:
+   - `meta.json`: Contains theme metadata like ID, name, description, thumbnail source, and tags.
+   - `preview.tsx`: A React component that provides a visual preview of the theme for the selection UI.
+   - `generator.ts`: A function that takes `MVPContentData` and returns the generated site content (e.g., TOML for Hugo, or full HTML/CSS).
+   - `index.ts`: This file should export all necessary components of your theme (e.g., the theme object itself which bundles meta, preview, and generator).
 
-3. Register your theme by importing it in `web/themes/index.ts`
+3. Register your theme: Import your theme's main export (from its `index.ts`) into the central theme registry located at `web/themes/index.ts` and call `registerTheme()` with your theme object.
 
 Each theme must implement the `Theme` interface defined in `web/themes/index.ts`, which includes:
 - `meta`: Theme metadata
@@ -172,7 +177,6 @@ Each theme must implement the `Theme` interface defined in `web/themes/index.ts`
 - `generator`: Function to generate deployable output
 
 See existing themes for examples of implementation patterns.
-```
 
 ## 🚀 Development Roadmap
 
