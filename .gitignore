@@ -10,6 +10,7 @@ __pycache__/
 .venv/
 env/
 venv/
+venv_new/
 ENV/
 
 # Distribution / packaging
@@ -106,3 +107,9 @@ ehthumbs.db
 
 # Windows thumbnail cache files
 Thumbs.db:encryptable
+
+# Add .hvm and output directories
+.hvm
+demo_portfolio/
+generated_portfolio/
+portfolio_site/
