@@ -1,0 +1,12 @@
+name = "Minimal"
+license = "MIT"
+licenselink = "https://github.com/socrabytes/quickfolio/blob/main/LICENSE"
+description = "A clean, minimal theme for professional portfolios"
+homepage = "https://github.com/socrabytes/quickfolio"
+tags = ["responsive", "minimal", "portfolio", "personal", "clean"]
+features = ["responsive", "tailwind"]
+min_version = "0.41.0"
+
+[author]
+  name = "Quickfolio"
+  homepage = "https://github.com/socrabytes/quickfolio"

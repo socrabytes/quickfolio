@@ -1,0 +1,36 @@
+{{ define "main" }}
+<div class="prose lg:prose-xl mx-auto">
+    <h1 class="text-3xl font-bold mb-6">{{ .Title }}</h1>
+    
+    {{ .Content }}
+    
+    {{ if eq .Section "projects" }}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+        {{ range .Pages }}
+        <div class="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow">
+            <h2 class="text-xl font-semibold mb-2">
+                <a href="{{ .Permalink }}" class="text-primary hover:text-secondary transition-colors">
+                    {{ .Title }}
+                </a>
+            </h2>
+            <p class="text-gray-600 mb-4">{{ .Summary }}</p>
+            <a href="{{ .Permalink }}" class="text-primary hover:text-secondary font-medium transition-colors">
+                Read more →
+            </a>
+        </div>
+        {{ end }}
+    </div>
+    {{ else }}
+    <ul class="mt-6 space-y-4">
+        {{ range .Pages }}
+        <li>
+            <a href="{{ .Permalink }}" class="text-primary hover:text-secondary transition-colors">
+                {{ .Title }}
+            </a>
+            <span class="text-gray-500 text-sm ml-2">{{ .Date.Format "Jan 2, 2006" }}</span>
+        </li>
+        {{ end }}
+    </ul>
+    {{ end }}
+</div>
+{{ end }}

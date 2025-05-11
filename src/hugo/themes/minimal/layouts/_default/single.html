@@ -1,0 +1,27 @@
+{{ define "main" }}
+<article class="prose lg:prose-xl mx-auto">
+    <header class="mb-8">
+        <h1 class="text-3xl font-bold mb-2">{{ .Title }}</h1>
+        {{ if not .Date.IsZero }}
+        <time class="text-gray-500 text-sm">{{ .Date.Format "January 2, 2006" }}</time>
+        {{ end }}
+    </header>
+    
+    <div class="content">
+        {{ .Content }}
+    </div>
+    
+    {{ if .Params.tags }}
+    <div class="mt-8">
+        <h3 class="text-lg font-semibold mb-2">Tags</h3>
+        <div class="flex flex-wrap gap-2">
+            {{ range .Params.tags }}
+            <a href="{{ "/tags/" | relLangURL }}{{ . | urlize }}" class="bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-1 rounded-full text-sm transition-colors">
+                {{ . }}
+            </a>
+            {{ end }}
+        </div>
+    </div>
+    {{ end }}
+</article>
+{{ end }}
