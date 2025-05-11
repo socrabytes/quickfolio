@@ -34,8 +34,8 @@ const WaitlistForm: React.FC<WaitlistFormProps> = ({ onSubmit, showSuccess }) =>
           <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-green-500 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <h3 className="text-lg font-semibold text-green-800 mb-1">You're on the list!</h3>
-          <p className="text-green-700">We'll notify you when Quickfolio launches.</p>
+          <h3 className="text-lg font-semibold text-green-800 mb-1">You&apos;re on the list!</h3>
+          <p className="text-green-700">We&apos;ll notify you when Quickfolio launches.</p>
         </div>
       ) : (
         <form onSubmit={handleSubmit(submitHandler)} className="space-y-4">
@@ -73,7 +73,7 @@ const WaitlistForm: React.FC<WaitlistFormProps> = ({ onSubmit, showSuccess }) =>
           </button>
           
           <p className="text-xs text-gray-500 text-center">
-            We'll never share your email. Unsubscribe anytime.
+            We&apos;ll never share your email. Unsubscribe anytime.
           </p>
         </form>
       )}

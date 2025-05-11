@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 
-const Header: React.FC = () => {
+const Header = (): JSX.Element => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   return (

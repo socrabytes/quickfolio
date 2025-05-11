@@ -1,0 +1,7 @@
+{
+  "id": "lynx",
+  "name": "Lynx - Classic Hugo Theme",
+  "description": "A clean, minimalist Hugo theme optimized for link-in-bio pages with excellent SEO.",
+  "thumbnailSrc": "/images/themes/lynx-thumbnail.png",
+  "tags": ["minimal", "light", "professional", "hugo"]
+}

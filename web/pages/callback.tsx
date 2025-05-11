@@ -59,7 +59,7 @@ const Callback: NextPage = () => {
     };
     
     processCode();
-  }, [router.isReady, router.query]);
+  }, [router, router.isReady, router.query]);
   
   return (
     <div className="min-h-screen flex flex-col bg-background">

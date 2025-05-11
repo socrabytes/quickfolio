@@ -113,3 +113,9 @@ Thumbs.db:encryptable
 demo_portfolio/
 generated_portfolio/
 portfolio_site/
+
+# Quickfolio specific temporary files
+temp_uploads/
+*/temp_uploads/
+temp_resume_*
+*.temp_resume_*

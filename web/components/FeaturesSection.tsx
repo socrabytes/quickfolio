@@ -64,7 +64,7 @@ const FeaturesSection: React.FC = () => {
         <div className="text-center mb-16">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">Why Choose Quickfolio?</h2>
           <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-            Quickfolio isn't just another link-in-bio tool. It's a complete portfolio solution that puts you in control.
+            Quickfolio isn&apos;t just another link-in-bio tool. It&apos;s a complete portfolio solution that puts you in control.
           </p>
         </div>
         

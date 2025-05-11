@@ -28,7 +28,6 @@ const Home: NextPage = () => {
         <title>Quickfolio | Resume to Portfolio in Minutes</title>
         <meta name="description" content="Transform your resume into a professional portfolio website in minutes with AI-powered Quickfolio." />
         <link rel="icon" href="/favicon.ico" />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
       </Head>
 
       <Header />

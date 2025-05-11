@@ -72,11 +72,18 @@ npm run dev
 # The landing page will be available at http://localhost:3000
 ```
 
-The web interface is currently being developed with these features:
-- Resume upload and parsing directly in the browser
-- GitHub OAuth integration for one-click deployment
+To test the portfolio creation wizard:
+1. Start the API server: `python main.py api`
+2. In another terminal, start the web UI: `cd web && npm run dev`
+3. Visit http://localhost:3000 and click "Create Portfolio"
+4. Follow the step-by-step wizard
+
+Currently implemented web features:
+- Resume upload and parsing UI
+- Theme selection with visual previews
 - Portfolio customization interface
-- Live preview of generated sites
+- GitHub OAuth integration for one-click deployment
+- API service layer connecting frontend to backend
 
 ### Testing
 
@@ -109,6 +116,62 @@ python scripts/test_ai_generator.py path/to/resume_data.json
 │   └── utils/          # Helper functions
 ├── web/                # Landing page (Next.js)
 └── scripts/            # CI/CD and utility scripts
+
+## 🎨 Theme System
+
+Quickfolio features a flexible theme system that allows users to choose from different visual styles for their link-in-bio pages.
+
+### Available Themes
+
+1. **Lynx** - A clean, minimal Hugo-based theme with:
+   - Light color scheme optimized for readability
+   - Professional link layout with icons
+   - Excellent SEO optimization
+   - TOML configuration for Hugo deployment
+
+2. **Nebula** - A modern dark-themed design featuring:
+   - Dark background with purple gradient accents
+   - Card-based link layout with subtle glow effects
+   - Mobile-optimized responsive design
+   - Standalone HTML/CSS output
+
+### Theme Architecture
+
+Themes are built with a modular architecture that separates concerns:
+
+```
+web/
+  └─ themes/
+      ├─ index.ts        # Registry & interfaces
+      ├─ lynx/           # Hugo-based theme
+      │   ├─ preview.tsx # React preview component
+      │   ├─ meta.json   # Theme metadata
+      │   └─ generator.ts# TOML configuration generator
+      └─ nebula/         # Dark card theme
+          ├─ preview.tsx # React preview component
+          ├─ meta.json   # Theme metadata
+          └─ generator.ts# HTML/CSS generator
+```
+
+### Creating New Themes
+
+To add a new theme to Quickfolio:
+
+1. Create a new directory in `web/themes/` for your theme (e.g., `web/themes/aurora/`)
+2. Create the following files:
+   - `meta.json`: Theme metadata (name, description, tags)
+   - `preview.tsx`: React component for visual preview
+   - `generator.ts`: Output generator (TOML, HTML, etc.)
+   - `index.ts`: Registration file that imports the above
+
+3. Register your theme by importing it in `web/themes/index.ts`
+
+Each theme must implement the `Theme` interface defined in `web/themes/index.ts`, which includes:
+- `meta`: Theme metadata
+- `previewComponent`: React component for visual preview
+- `generator`: Function to generate deployable output
+
+See existing themes for examples of implementation patterns.
 ```
 
 ## 🚀 Development Roadmap
@@ -122,8 +185,9 @@ python scripts/test_ai_generator.py path/to/resume_data.json
 
 ### Phase 1: Public Alpha - In Progress
 - ✅ GitHub OAuth integration
-- 🔄 CLI-less onboarding UI (current focus)
-- 🔄 Custom domain wizard
+- ✅ CLI-less onboarding UI
+- ✅ Multiple theme options with visual previews
+- 🔄 Custom domain wizard (next focus)
 - 🔄 Lite hosting plan option
 
 ### Phase 2: Content Sync - Planned
@@ -142,6 +206,8 @@ python scripts/test_ai_generator.py path/to/resume_data.json
 - [Setup Guide for Developers](docs/workflow/setup_guide.md)
 - [GitHub Deployment Guide](docs/features/github_deployment.md)
 - [Troubleshooting Guide](docs/workflow/troubleshooting.md)
+
+For developers, check our [GitHub Issues](https://github.com/socrabytes/quickfolio/issues) for current development status and planned tasks. We use a structured workflow with labeled issues to track progress on all features.
 
 ### Setting Up GitHub OAuth
 

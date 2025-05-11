@@ -1,7 +1,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 
-const Footer: React.FC = () => {
+const Footer = (): JSX.Element => {
   return (
     <footer className="bg-gray-900 text-white py-12">
       <div className="container mx-auto px-4">

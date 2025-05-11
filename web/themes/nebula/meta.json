@@ -1,0 +1,7 @@
+{
+  "id": "nebula",
+  "name": "Nebula - Dark Cards",
+  "description": "A sleek, dark-themed link-in-bio page with attractive glowing cards.",
+  "thumbnailSrc": "/images/themes/nebula-thumbnail.png",
+  "tags": ["dark", "modern", "cards", "glowing", "static"]
+}

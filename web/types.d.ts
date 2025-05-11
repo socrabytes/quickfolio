@@ -1,4 +1,5 @@
 // React and Next.js type declarations
+/*
 declare module 'react' {
   export = React;
   export as namespace React;
@@ -15,6 +16,7 @@ declare module 'react' {
     }
   }
 }
+*/
 
 declare module 'next/link' {
   import { ReactNode } from 'react';

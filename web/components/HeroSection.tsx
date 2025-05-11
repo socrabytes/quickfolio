@@ -1,4 +1,5 @@
 import React from 'react';
+import Link from 'next/link';
 import WaitlistForm from './WaitlistForm';
 
 interface HeroSectionProps {
@@ -21,15 +22,21 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onWaitlistSubmit, showSuccess
               AI-powered, GitHub-hosted, and completely yours.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
+              <Link 
+                href="/create" 
+                className="bg-primary hover:bg-secondary text-white font-medium py-3 px-6 rounded-md transition-colors text-center"
+              >
+                Create Portfolio
+              </Link>
               <a 
                 href="#how-it-works" 
-                className="bg-primary hover:bg-secondary text-white font-medium py-3 px-6 rounded-md transition-colors text-center"
+                className="bg-white border border-primary text-primary hover:bg-gray-50 font-medium py-3 px-6 rounded-md transition-colors text-center"
               >
                 See How It Works
               </a>
               <a 
                 href="#waitlist" 
-                className="bg-white border border-primary text-primary hover:bg-gray-50 font-medium py-3 px-6 rounded-md transition-colors text-center"
+                className="bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium py-3 px-6 rounded-md transition-colors text-center"
               >
                 Join Waitlist
               </a>
