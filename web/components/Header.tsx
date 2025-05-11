@@ -21,6 +21,9 @@ const Header: React.FC = () => {
             <Link href="#how-it-works" className="text-text hover:text-primary transition-colors">
               How It Works
             </Link>
+            <Link href="/create" className="text-text hover:text-primary transition-colors font-medium">
+              Create Portfolio
+            </Link>
             <Link href="#waitlist" className="bg-primary hover:bg-secondary text-white px-4 py-2 rounded-md transition-colors">
               Join Waitlist
             </Link>
@@ -60,6 +63,13 @@ const Header: React.FC = () => {
               onClick={() => setIsMenuOpen(false)}
             >
               How It Works
+            </Link>
+            <Link 
+              href="/create" 
+              className="block text-text hover:text-primary transition-colors font-medium"
+              onClick={() => setIsMenuOpen(false)}
+            >
+              Create Portfolio
             </Link>
             <Link 
               href="#waitlist" 

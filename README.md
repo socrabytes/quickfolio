@@ -61,7 +61,7 @@ python main.py api
 # The API will be available at http://localhost:8000
 ```
 
-#### Option 3: Web Interface (Coming Soon)
+#### Option 3: Web Interface (In Development)
 
 ```bash
 # Run the Next.js development server
@@ -71,6 +71,12 @@ npm run dev
 
 # The landing page will be available at http://localhost:3000
 ```
+
+The web interface is currently being developed with these features:
+- Resume upload and parsing directly in the browser
+- GitHub OAuth integration for one-click deployment
+- Portfolio customization interface
+- Live preview of generated sites
 
 ### Testing
 
@@ -115,9 +121,10 @@ python scripts/test_ai_generator.py path/to/resume_data.json
 - GitHub Actions deployment
 
 ### Phase 1: Public Alpha - In Progress
-- CLI-less onboarding UI
-- Custom domain wizard
-- Lite hosting plan option
+- ✅ GitHub OAuth integration
+- 🔄 CLI-less onboarding UI (current focus)
+- 🔄 Custom domain wizard
+- 🔄 Lite hosting plan option
 
 ### Phase 2: Content Sync - Planned
 - GitHub activity integration
