@@ -20,11 +20,11 @@ THEMES_DIR = SRC_DIR / "hugo" / "themes"
 env_path = SRC_DIR / ".env"
 load_dotenv(dotenv_path=env_path)
 
-# OpenAI Configuration
-OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
-OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-OPENAI_MAX_TOKENS: int = int(os.getenv("OPENAI_MAX_TOKENS", "500"))
-OPENAI_TEMPERATURE: float = float(os.getenv("OPENAI_TEMPERATURE", "0.7"))
+# Gemini AI Configuration
+GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-pro")
+GEMINI_MAX_TOKENS: int = int(os.getenv("GEMINI_MAX_TOKENS", "500"))
+GEMINI_TEMPERATURE: float = float(os.getenv("GEMINI_TEMPERATURE", "0.7"))
 
 # GitHub Configuration
 GITHUB_CLIENT_ID: str = os.getenv("GITHUB_CLIENT_ID", "")

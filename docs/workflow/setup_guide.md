@@ -41,7 +41,9 @@ cp src/.env.example src/.env
 
 Edit `src/.env` and add your API keys:
 
-- Get an OpenAI API key from [https://platform.openai.com/](https://platform.openai.com/)
+- Get a free Google Gemini API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
+  - No credit card required for the free tier
+  - Generous free quota of 60 requests per minute
 - Create a GitHub OAuth App at [https://github.com/settings/developers](https://github.com/settings/developers)
   - Set the callback URL to `http://localhost:8000/github/callback`
 

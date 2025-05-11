@@ -9,7 +9,7 @@ All notable changes to Quickfolio will be documented in this file.
 - Basic project structure
 - Comprehensive README with project overview
 - Resume PDF parser implementation
-- OpenAI integration for content generation
+- Google Gemini API integration for content generation (free tier)
 - Hugo templates with minimal theme
 - GitHub OAuth and repository automation
 - GitHub Actions for automated deployments

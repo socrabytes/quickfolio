@@ -20,7 +20,7 @@ The parsed data is converted to a standardized JSON format that serves as the fo
 
 ### 2. AI Content Enhancement
 
-Using OpenAI's advanced language models, Quickfolio transforms raw resume data into compelling portfolio content:
+Using Google's Gemini AI language models, Quickfolio transforms raw resume data into compelling portfolio content:
 
 - **Professional Bio**: Creates an engaging professional summary that highlights your unique value proposition
 - **Project Descriptions**: Enhances project descriptions to emphasize achievements and impact

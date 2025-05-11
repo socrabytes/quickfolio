@@ -1,19 +1,20 @@
 """
 AI Content Generator
 
-This module uses OpenAI to enhance resume content for portfolio generation.
+This module uses Google's Gemini AI to enhance resume content for portfolio generation.
 It transforms raw resume data into polished, professional content for the portfolio site.
 """
 from typing import Dict, List, Optional, Any, Tuple
+import uuid
 
-import openai
+import google.generativeai as genai
 from pydantic import BaseModel
 
 from src.config import (
-    OPENAI_API_KEY,
-    OPENAI_MODEL,
-    OPENAI_MAX_TOKENS,
-    OPENAI_TEMPERATURE,
+    GEMINI_API_KEY,
+    GEMINI_MODEL,
+    GEMINI_MAX_TOKENS,
+    GEMINI_TEMPERATURE,
 )
 
 
@@ -36,18 +37,24 @@ class GenerationResponse(BaseModel):
 
 class ContentGenerator:
     """
-    Generates enhanced content from resume data using OpenAI.
+    Generates enhanced content from resume data using Google's Gemini AI.
     
     This class handles the transformation of structured resume data
     into polished, professional content for the portfolio site.
     """
     
     def __init__(self) -> None:
-        """Initialize the content generator with OpenAI API configuration."""
-        openai.api_key = OPENAI_API_KEY
-        self.model = OPENAI_MODEL
-        self.max_tokens = OPENAI_MAX_TOKENS
-        self.temperature = OPENAI_TEMPERATURE
+        """Initialize the content generator with Gemini API configuration."""
+        genai.configure(api_key=GEMINI_API_KEY)
+        self.model = GEMINI_MODEL
+        self.max_tokens = GEMINI_MAX_TOKENS
+        self.temperature = GEMINI_TEMPERATURE
+        self.generation_config = {
+            "max_output_tokens": self.max_tokens,
+            "temperature": self.temperature,
+            "top_p": 0.95,
+            "top_k": 40,
+        }
     
     def generate_bio(self, resume_data: Dict[str, Any], tone: str = "professional") -> str:
         """
@@ -64,8 +71,10 @@ class ContentGenerator:
         name = resume_data.get("contact", {}).get("name", "")
         raw_text = resume_data.get("raw_text", "")
         
-        # Create prompt for OpenAI
-        prompt = f"""
+        # Create prompt for Gemini
+        system_prompt = "You are a professional resume writer specializing in creating compelling personal bios."
+        
+        user_prompt = f"""
         Create a professional bio for {name} based on their resume information below.
         Use a {tone} tone and focus on their most impressive achievements and skills.
         Keep it concise (2-3 paragraphs) and engaging.
@@ -75,18 +84,20 @@ class ContentGenerator:
         """
         
         try:
-            response = openai.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": "You are a professional resume writer specializing in creating compelling personal bios."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=self.max_tokens,
-                temperature=self.temperature
+            # Initialize Gemini model
+            model = genai.GenerativeModel(
+                model_name=self.model,
+                generation_config=self.generation_config,
             )
             
+            # Create structured prompt with system and user instructions
+            prompt_parts = [system_prompt, user_prompt]
+            
+            # Generate content
+            response = model.generate_content(prompt_parts)
+            
             # Extract and return the generated bio
-            return response.choices[0].message.content.strip()
+            return response.text.strip()
         except Exception as e:
             # Fallback to a generic bio if API call fails
             return f"Professional with experience in various fields. Contact: {name}."
@@ -108,6 +119,17 @@ class ContentGenerator:
         """
         enhanced_descriptions = {}
         
+        # Create the model once for efficiency
+        model = genai.GenerativeModel(
+            model_name=self.model,
+            generation_config={
+                **self.generation_config,
+                "max_output_tokens": 150  # Shorter for project descriptions
+            },
+        )
+        
+        system_prompt = "You are a technical writer who specializes in compelling project descriptions."
+        
         for project in projects:
             name = project.get("name", "")
             description = project.get("description", "")
@@ -118,7 +140,7 @@ class ContentGenerator:
                 
             tech_str = ", ".join(technologies) if technologies else ""
             
-            prompt = f"""
+            user_prompt = f"""
             Enhance this project description to be more compelling and achievement-focused.
             Use a {tone} tone and highlight the impact and skills demonstrated.
             
@@ -128,17 +150,11 @@ class ContentGenerator:
             """
             
             try:
-                response = openai.chat.completions.create(
-                    model=self.model,
-                    messages=[
-                        {"role": "system", "content": "You are a technical writer who specializes in compelling project descriptions."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    max_tokens=150,  # Shorter for project descriptions
-                    temperature=self.temperature
-                )
+                # Generate content
+                prompt_parts = [system_prompt, user_prompt]
+                response = model.generate_content(prompt_parts)
                 
-                enhanced_descriptions[name] = response.choices[0].message.content.strip()
+                enhanced_descriptions[name] = response.text.strip()
             except Exception:
                 # Fallback to original description
                 enhanced_descriptions[name] = description
@@ -161,7 +177,8 @@ class ContentGenerator:
         skill_names = [skill.get("name", "") for skill in skills if skill.get("name")]
         skill_str = ", ".join(skill_names)
         
-        prompt = f"""
+        system_prompt = "You are a technical recruiter who can summarize skill sets effectively."
+        user_prompt = f"""
         Write a concise paragraph (3-4 sentences) summarizing this person's technical skills.
         Group related skills and highlight expertise areas.
         
@@ -169,17 +186,20 @@ class ContentGenerator:
         """
         
         try:
-            response = openai.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": "You are a technical recruiter who can summarize skill sets effectively."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=150,
-                temperature=self.temperature
+            # Initialize model
+            model = genai.GenerativeModel(
+                model_name=self.model,
+                generation_config={
+                    **self.generation_config,
+                    "max_output_tokens": 150
+                },
             )
             
-            return response.choices[0].message.content.strip()
+            # Generate content
+            prompt_parts = [system_prompt, user_prompt]
+            response = model.generate_content(prompt_parts)
+            
+            return response.text.strip()
         except Exception:
             # Fallback
             return f"Technical expertise includes: {skill_str}."
@@ -196,8 +216,6 @@ class ContentGenerator:
         Returns:
             Generated content for the portfolio
         """
-        import uuid
-        
         # Generate bio
         bio = self.generate_bio(request.resume_data, request.tone)
         
