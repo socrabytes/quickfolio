@@ -12,6 +12,7 @@ python-multipart==0.0.9
 
 # GitHub integration
 PyGithub==2.2.0
+GitPython==3.1.41
 
 # Utils
 pydantic==2.5.3

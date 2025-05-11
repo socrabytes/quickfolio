@@ -205,15 +205,34 @@ class GitHubService:
             GitHubRepoError: If pushing template fails
         """
         try:
-            # This would be implemented with PyGithub's file operations
-            # For now, this is a placeholder for the actual implementation
-            # In a real implementation, we would:
-            # 1. Clone the repo to a temp directory
-            # 2. Copy template files to the temp directory
-            # 3. Commit and push changes
-            
-            # Placeholder for actual implementation
-            pass
+            # Create a temporary directory for the clone
+            with tempfile.TemporaryDirectory() as temp_dir:
+                # Clone the repository
+                import git
+                repo_url = f"https://{user.login}:{user.name}@github.com/{user.login}/{repo.name}.git"
+                local_repo = git.Repo.clone_from(repo_url, temp_dir)
+                
+                # Copy template files to the temp directory
+                import shutil
+                for item in template_path.glob("*"):
+                    if item.is_dir():
+                        shutil.copytree(item, Path(temp_dir) / item.name, dirs_exist_ok=True)
+                    else:
+                        shutil.copy2(item, Path(temp_dir) / item.name)
+                
+                # Create basic GitHub Pages configuration
+                with open(Path(temp_dir) / ".nojekyll", "w") as f:
+                    pass  # Empty file to disable Jekyll processing
+                
+                # Add all files to git
+                local_repo.git.add(A=True)
+                
+                # Commit changes
+                local_repo.git.commit("-m", "✨ feat: Initial portfolio setup")
+                
+                # Push changes
+                local_repo.git.push("origin", "main")
+                
         except Exception as e:
             raise GitHubRepoError(f"Failed to push template to repository: {str(e)}")
     

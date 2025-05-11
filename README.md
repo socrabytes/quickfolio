@@ -133,6 +133,36 @@ python scripts/test_ai_generator.py path/to/resume_data.json
 
 - [Features Overview](docs/features/overview.md)
 - [Setup Guide for Developers](docs/workflow/setup_guide.md)
+- [GitHub Deployment Guide](docs/features/github_deployment.md)
+- [Troubleshooting Guide](docs/workflow/troubleshooting.md)
+
+### Setting Up GitHub OAuth
+
+To enable automatic deployment to GitHub Pages:
+
+1. Create a [GitHub OAuth application](https://github.com/settings/developers)
+2. Configure Quickfolio with your OAuth credentials in `.env`:
+   ```
+   GITHUB_CLIENT_ID=your_client_id_here
+   GITHUB_CLIENT_SECRET=your_client_secret_here
+   GITHUB_CALLBACK_URL=http://localhost:8000/github/callback
+   ```
+3. Test your setup with `python scripts/test_github_oauth.py`
+
+For detailed instructions, see the [GitHub Deployment Guide](docs/features/github_deployment.md).
+
+### Gemini API Configuration
+
+Quickfolio uses Google's Gemini API for content generation. Configure your `.env` file:
+
+```
+GEMINI_API_KEY=your_api_key_here
+GEMINI_MODEL=models/gemini-2.0-flash
+GEMINI_MAX_TOKENS=500
+GEMINI_TEMPERATURE=0.7
+```
+
+Note: The model name must be in the new format `models/gemini-2.0-flash` (not the older `gemini-pro` format).
 
 ---
 
