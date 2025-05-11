@@ -55,6 +55,9 @@ class ContentGenerator:
             "top_p": 0.95,
             "top_k": 40,
         }
+        
+        # Print model information for debugging
+        print(f"Using Gemini model: {self.model}")
     
     def generate_bio(self, resume_data: Dict[str, Any], tone: str = "professional") -> str:
         """
@@ -99,6 +102,8 @@ class ContentGenerator:
             # Extract and return the generated bio
             return response.text.strip()
         except Exception as e:
+            # Print the exception details for debugging
+            print(f"Gemini API Error in generate_bio: {type(e).__name__}: {str(e)}")
             # Fallback to a generic bio if API call fails
             return f"Professional with experience in various fields. Contact: {name}."
     
@@ -155,7 +160,9 @@ class ContentGenerator:
                 response = model.generate_content(prompt_parts)
                 
                 enhanced_descriptions[name] = response.text.strip()
-            except Exception:
+            except Exception as e:
+                # Print the exception details for debugging
+                print(f"Gemini API Error in enhance_project_descriptions: {type(e).__name__}: {str(e)}")
                 # Fallback to original description
                 enhanced_descriptions[name] = description
                 
@@ -200,7 +207,9 @@ class ContentGenerator:
             response = model.generate_content(prompt_parts)
             
             return response.text.strip()
-        except Exception:
+        except Exception as e:
+            # Print the exception details for debugging
+            print(f"Gemini API Error in generate_skills_summary: {type(e).__name__}: {str(e)}")
             # Fallback
             return f"Technical expertise includes: {skill_str}."
     
