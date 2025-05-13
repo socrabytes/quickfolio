@@ -9,7 +9,8 @@ import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, Depends, RedirectResponse
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, Depends
+from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -24,6 +25,14 @@ import logging
 import json
 import google.generativeai as genai
 from pydantic import ValidationError
+
+# Import models from their new location
+from src.models.mvp_model import ProfileData, CustomUrl, LinkData, MVPContentData
+
+# Assuming a theme engine/manager exists or will be created
+# This will be responsible for taking MVPContentData and a theme_id
+# and returning a dictionary of {filepath: content_string}
+from src.themes.engine import generate_themed_content_files # Placeholder for actual import
 
 app = FastAPI(
     title="Quickfolio API",
@@ -79,50 +88,6 @@ class DeploymentResponse(BaseModel):
     repository_url: str
     message: str
 
-
-# --- New MVP Models ---
-class ProfileData(BaseModel):
-    """Profile data for the link-in-bio page"""
-    name: str
-    headline: str
-    avatar: str # e.g., "avatar.jpg" - user provides file, AI suggests filename
-
-# Custom validator for URLs that allows mailto: and tel: schemes
-from pydantic import AnyUrl, field_validator
-
-class CustomUrl(AnyUrl):
-    """Custom URL type that allows mailto: and tel: schemes"""
-    @classmethod
-    def validate_url(cls, value: str) -> str:
-        # Handle special URL schemes
-        if value.startswith('mailto:') or value.startswith('tel:') or value == '#':
-            return value
-        # Let parent handle standard http/https URLs
-        return super().validate_url(value)
-
-class LinkData(BaseModel):
-    """Link data for the link-in-bio page"""
-    text: str
-    url: str  # We'll validate this with a custom validator
-    icon: Optional[str] = None # e.g., "linkedin", "github"
-    type: Optional[str] = None # e.g., "social", "project", "document"
-    
-    # Validate URLs allowing special schemes
-    @field_validator('url')
-    def validate_url(cls, v: str) -> str:
-        # Allow special schemes
-        if v.startswith('mailto:') or v.startswith('tel:') or v == '#':
-            return v
-        # Check for http/https schemes
-        if not v.startswith('http://') and not v.startswith('https://'):
-            v = 'https://' + v  # Add https:// prefix if missing
-        # No validation beyond this - we've already normalized in the processing function
-        return v
-
-class MVPContentData(BaseModel):
-    """Structure for the complete MVP content"""
-    profile: ProfileData
-    links: List[LinkData]
 
 class MVPContentGenerationRequest(BaseModel):
     """Request model for MVP content generation endpoint"""
@@ -549,77 +514,102 @@ async def github_app_callback(
 
 @app.post("/deploy", response_model=DeploymentResponse)
 async def deploy_portfolio(
-    installation_id: int = Form(...),      # New: From GitHub App installation
-    user_login: str = Form(...),           # New: GitHub username of the installer
-    generated_content: str = Form(...),    # Assuming this contains structured data like MVPContentData as JSON string
-    theme: str = Form("lynx"),             # Defaulting to 'lynx' from memory
-    repo_name: str = Form(...),            # Now required, no longer optional or using user.login.github.io
+    installation_id: int = Form(...),
+    user_login: str = Form(...),
+    repo_name: str = Form(...),
+    generated_content: str = Form(...), # JSON string of MVPContentData
+    theme: str = Form(...), # Theme ID, e.g., "lynx"
     portfolio_description: Optional[str] = Form("My Quickfolio-generated portfolio site"),
     private_repo: bool = Form(False)
 ):
     """
-    Deploy portfolio site to GitHub Pages using GitHub App installation.
-    
-    Args:
-        installation_id: GitHub App installation ID.
-        user_login: GitHub username of the account where the app is installed.
-        generated_content: JSON string of portfolio content (e.g., MVPContentData).
-        theme: Theme to use for the portfolio.
-        repo_name: Desired repository name (e.g., "my-portfolio").
-        portfolio_description: Description for the new repository.
-        private_repo: Whether the repository should be private.
-        
-    Returns:
-        Deployment information (repository URL and GitHub Pages URL).
+    Deploy a new portfolio site to GitHub Pages.
+    1. Authenticates with GitHub App installation ID.
+    2. Creates a new repository with a base theme template.
+    3. Generates theme-specific content files from AI-generated data.
+    4. Pushes the generated content files to the repository.
     """
-    logger.info(
-        f"Deployment request: installation_id={installation_id}, user_login='{user_login}', "
-        f"repo_name='{repo_name}', theme='{theme}', private={private_repo}"
-    )
-
+    logger.info(f"Deployment request received for user: {user_login}, repo: {repo_name}, theme: {theme}")
     try:
-        # 1. Get installation access token for the given installation_id
+        # 1. Get Installation Access Token
         token_info = github_service.get_installation_access_token(installation_id)
-        installation_access_token = token_info[0] # The token string
-        # token_expires_at = token_info[1] # Expiration datetime, useful for caching if needed
+        if not token_info or not token_info[0]:
+            raise GitHubAuthError("Failed to obtain installation access token.")
+        installation_access_token = token_info[0]
         logger.info(f"Obtained installation access token for installation_id: {installation_id}")
 
-        # 2. Prepare template path (this needs to be robust)
-        #    The 'theme' parameter should map to a directory in TEMPLATES_DIR
-        #    For now, assuming 'theme' directly corresponds to a subdirectory name.
-        #    E.g., if TEMPLATES_DIR is 'src/templates' and theme is 'lynx', path is 'src/templates/lynx'
-        #    This path should contain the actual site files (HTML, CSS, JS, images, .github/workflows/*)
+        # 2. Parse generated_content JSON string into MVPContentData
+        try:
+            parsed_mvp_content_dict = json.loads(generated_content)
+            mvp_content_data = MVPContentData(**parsed_mvp_content_dict)
+            logger.info("Successfully parsed generated_content into MVPContentData.")
+        except json.JSONDecodeError as e:
+            logger.error(f"JSONDecodeError parsing generated_content: {e}")
+            raise HTTPException(status_code=400, detail=f"Invalid format for generated_content: {e}")
+        except ValidationError as e:
+            logger.error(f"ValidationError parsing generated_content into MVPContentData: {e}")
+            raise HTTPException(status_code=400, detail=f"Invalid data structure for generated_content: {e}")
+
+        # 3. Prepare base theme template path
         selected_template_path = TEMPLATES_DIR / theme
         if not selected_template_path.is_dir():
             logger.error(f"Theme template directory not found: {selected_template_path}")
             raise HTTPException(status_code=400, detail=f"Theme '{theme}' not found.")
-        logger.info(f"Using template path: {selected_template_path}")
+        logger.info(f"Using base theme template path: {selected_template_path}")
         
-        # TODO: Actual content processing using `generated_content` and `theme`.
-        # For now, we are focused on the GitHub interaction part.
-        # This would involve:
-        # 1. Parsing `generated_content` (JSON string) into Python objects (e.g., MVPContentData).
-        # 2. Using a theme-specific generator to create the actual HTML/config files 
-        #    and place them into a temporary directory that will be used by `_push_template_to_repo`.
-        #    The `template_path` argument for `create_pages_repository` would then point to this temporary directory.
-        #    For this step, let's assume `selected_template_path` *is* the directory with final files.
-        
-        # 3. Create GitHub Pages repository and push the template content
+        # 4. Create GitHub Pages repository with the base theme template
+        # This step creates the repo, pushes the initial theme files (including .github/workflows), 
+        # and enables GitHub Pages.
+        repo_full_name = f"{user_login}/{repo_name}"
         repo_html_url, pages_url = github_service.create_pages_repository(
             installation_access_token=installation_access_token,
             user_login=user_login,
             repo_name=repo_name,
-            template_path=selected_template_path, # This should be the path to the fully generated site files
+            template_path=selected_template_path, 
             description=portfolio_description,
             private=private_repo
         )
-        
-        logger.info(f"Repository created: {repo_html_url}, Pages URL: {pages_url}")
-        
+        logger.info(f"Base repository created: {repo_html_url}, Pages URL pending build: {pages_url}")
+
+        # 5. Generate theme-specific content files from MVPContentData
+        # This function should return a Dict[str, str] where keys are filepaths relative to repo root
+        # and values are the string content of those files.
+        try:
+            themed_content_files = generate_themed_content_files(theme_id=theme, mvp_data=mvp_content_data)
+            logger.info(f"Generated {len(themed_content_files)} themed content files for theme '{theme}'.")
+        except Exception as e:
+            logger.error(f"Error generating themed content files: {e}", exc_info=True)
+            # Depending on the desired behavior, we might proceed without custom content or raise error
+            # For now, let's raise an error if content generation fails.
+            raise HTTPException(status_code=500, detail=f"Failed to generate themed content: {e}")
+
+        # 6. Push the generated themed content files to the repository
+        if themed_content_files: # Only push if there's content to push
+            try:
+                commit_message = f"✨ feat: Add portfolio content generated by Quickfolio for theme '{theme}'"
+                success = github_service.update_repository_content(
+                    installation_access_token=installation_access_token,
+                    full_repo_name=repo_full_name,
+                    content_files=themed_content_files,
+                    commit_message_prefix=commit_message # Using prefix as the full message here
+                )
+                if success:
+                    logger.info(f"Successfully pushed themed content to {repo_full_name}.")
+                else:
+                    logger.warning(f"Failed to push themed content to {repo_full_name}, but repository was created.")
+                    # Not raising an error here, as the repo is created and base theme is up.
+                    # The pages_url might still be valid with default theme content.
+            except Exception as e:
+                logger.error(f"Error pushing themed content files to {repo_full_name}: {e}", exc_info=True)
+                # Similar to above, log warning and proceed as base repo is up.
+                logger.warning(f"Failed to push themed content to {repo_full_name} due to error: {e}")
+        else:
+            logger.info(f"No specific themed content files generated for theme '{theme}'; base theme deployed.")
+
         return DeploymentResponse(
-            deployment_url=pages_url, # The live GitHub Pages URL
-            repository_url=repo_html_url, # The URL of the GitHub repository itself
-            message=f"Portfolio site '{repo_name}' deployment initiated successfully."
+            deployment_url=pages_url, # The live GitHub Pages URL (might take time to build)
+            repository_url=repo_html_url, 
+            message=f"Portfolio site '{repo_name}' deployment initiated. Content files are being processed."
         )
         
     except GitHubAuthError as e:

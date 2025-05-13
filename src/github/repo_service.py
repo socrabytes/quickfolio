@@ -15,6 +15,23 @@ from datetime import datetime
 
 import requests
 from github import Github, GithubException, Auth as GithubAuth
+from github import (
+    Repository,
+    AuthenticatedUser,
+    NamedUser, # For user/owner objects that are not the authenticated user
+    GitCommit,
+    GitTree,
+    InputGitTreeElement,
+    ContentFile,
+    GitBlob,
+    Branch,
+    PaginatedList,
+    GithubObject, # For NotSet
+    UnknownObjectException # More specific exception
+)
+# Removed problematic imports:
+# from github.PagesInfo import PagesInfo
+# from github.PagesBuild import PagesBuild
 
 from src.config import (
     GITHUB_APP_ID,
@@ -263,15 +280,20 @@ class GitHubService:
             GitHubAuthError: If user info retrieval fails
         """
         try:
-            github = Github(access_token)
-            user = github.get_user()
+            g = Github(access_token)
+            gh_user: AuthenticatedUser = g.get_user() # Corrected type hint
+            # Extract more details if needed, e.g., primary email
+            primary_email = None
+            emails = gh_user.get_emails()
+            if emails:
+                primary_email = emails[0].email
             
             return GitHubUser(
-                id=user.id,
-                login=user.login,
-                name=user.name,
-                email=user.email,
-                avatar_url=user.avatar_url,
+                id=gh_user.id,
+                login=gh_user.login,
+                name=gh_user.name,
+                email=primary_email,
+                avatar_url=gh_user.avatar_url,
             )
         except Exception as e:
             raise GitHubAuthError(f"Failed to get user info: {str(e)}")
@@ -284,93 +306,119 @@ class GitHubService:
         template_path: Path,
         description: str = "My Quickfolio-generated portfolio site",
         private: bool = False
-    ) -> Tuple[str, str]: # Returns (repo_html_url, pages_url)
+    ) -> Tuple[str, str]: # Returns (full_repo_name, pages_url)
         """
         Create a GitHub Pages repository for the user using an installation token.
         
         Args:
             installation_access_token: GitHub App installation access token.
-            user_login: The GitHub login of the user for whom the repo is created.
-            repo_name: The desired name for the new repository (e.g., "my-portfolio").
-            template_path: Path to the site template to use.
+            user_login: The GitHub login of the user for whom to create the repo (target namespace).
+            repo_name: Just the repo name, e.g., "my-portfolio"
+            template_path: Path to the directory containing template files.
             description: Description for the new repository.
             private: Whether the repository should be private.
             
         Returns:
-            A tuple containing the HTML URL of the created repository 
-            and the anticipated GitHub Pages URL.
+            A tuple containing the full repository name (e.g., "owner/repo") 
+            and the GitHub Pages URL (e.g., "https://owner.github.io/repo/").
             
         Raises:
             GitHubRepoError: If repository creation or setup fails.
+            GitHubAuthError: If authentication as user (via installation token context) fails.
         """
         try:
-            g = Github(auth=GithubAuth.Token(installation_access_token))
+            # Authenticate as the app installation, then get a Github object for the user context
+            g_app_auth = Github(auth=GithubAuth.Token(installation_access_token))
             
-            # For creating a repo in a user's account using an installation token
-            # that was installed on that user's account, we get the authenticated user
-            # context, which allows creating repos for that user.
-            authenticated_entity = g.get_user()
+            # Get the AuthenticatedUser object associated with this installation token's scope
+            # This allows actions as the user who installed the app, for that installation.
+            # Note: The user_login parameter specifies the target namespace if creating for an org.
+            # If creating for the user who installed the app, g_app_auth.get_user() is appropriate.
+            # For creating in an org, one might need g_app_auth.get_organization(user_login).create_repo(...)
+            # Assuming user_login is the actual user who installed or is target of installation.
+            
+            # target_entity = g_app_auth.get_user(user_login) # If user_login might be different from authenticated entity
+            # For simplicity, if user_login is the one who installed the app:
+            target_user_for_repo_creation: NamedUser = g_app_auth.get_user(user_login) # User under whose namespace repo is made
 
-            # Check if repo already exists under the user's account
+            full_repo_name = f"{target_user_for_repo_creation.login}/{repo_name}"
+            print(f"Attempting to create repository: {full_repo_name}")
+
+            # Check if repository already exists
             try:
-                repo_to_check_full_name = f"{user_login}/{repo_name}"
-                g.get_repo(repo_to_check_full_name)
-                # If get_repo didn't raise an exception, the repo exists.
-                raise GitHubRepoError(f"Repository '{repo_to_check_full_name}' already exists.")
-            except GithubException as e:
-                if e.status == 404:
-                    # This is expected if the repo doesn't exist, so we can proceed.
-                    pass 
-                else:
-                    # Some other error occurred while checking repo existence.
-                    error_msg = e.data.get('message', str(e)) if hasattr(e, 'data') and e.data else str(e)
-                    print(f"ERROR:create_pages_repository:Checking existence for {user_login}/{repo_name}: {error_msg}")
-                    raise GitHubRepoError(f"Error checking if repository '{user_login}/{repo_name}' exists: {error_msg}")
+                repo: Repository = g_app_auth.get_repo(full_repo_name) # Corrected type hint
+                print(f"Repository {full_repo_name} already exists.")
+                # Optionally, we could decide to delete and recreate, or update, or just return it
+                # For now, let's raise an error if it exists and we didn't expect it.
+                # raise GitHubRepoError(f"Repository {full_repo_name} already exists.")
+            except UnknownObjectException: # PyGithub raises this if repo not found
+                print(f"Repository {full_repo_name} does not exist. Creating...")
+                repo: Repository = target_user_for_repo_creation.create_repo( # Corrected type hint
+                    name=repo_name,
+                    description=description,
+                    private=private,
+                    auto_init=True,  # Creates with a README, required for initial commit/Pages
+                )
+                print(f"Repository {full_repo_name} created successfully.")
 
-            # Create the new repository
-            # The 'name' parameter is just the short name for the repo.
-            new_repo = authenticated_entity.create_repo(
-                name=repo_name,
-                description=description,
-                private=private,
-                auto_init=True # Initialize with a README
-            )
-            print(f"Repository '{new_repo.full_name}' created successfully.")
-
-            # Call _push_template_to_repo with new required arguments
-            # Note: _push_template_to_repo itself will be refactored in the next step
+            # Push template files to the new repository
+            print(f"Pushing template files from {template_path} to {full_repo_name}")
             self._push_template_to_repo(
-                installation_access_token=installation_access_token, # New arg for _push_template_to_repo
-                owner_login=new_repo.owner.login, # New arg for _push_template_to_repo
-                repo=new_repo, 
+                installation_access_token=installation_access_token, 
+                owner_login=target_user_for_repo_creation.login, 
+                repo=repo, 
                 template_path=template_path
             )
-            
-            # GitHub Pages setup will primarily be handled by a workflow file in the template.
-            # The URL is predictable.
-            pages_url = f"https://{new_repo.owner.login}.github.io/{new_repo.name}/"
-            print(f"GitHub Pages site expected at: {pages_url}")
-            
-            return new_repo.html_url, pages_url
-            
+            print(f"Template files pushed to {full_repo_name}.")
+
+            # Enable GitHub Pages
+            print(f"Enabling GitHub Pages for {full_repo_name}...")
+            try:
+                # Ensure there's a commit, auto_init=True should handle this for new repos.
+                # For existing empty repos, this might need an initial commit first.
+                # repo.get_branch("main") # Check if main branch exists
+                source = {"branch": "main", "path": "/"} # Standard for Pages on root of main
+                repo.enable_pages(source=source) # Updated PyGithub call
+                print(f"GitHub Pages enabled for {full_repo_name}.")
+            except PyGithubException as e:
+                # Common issue: "Branch "main" must have a commit to be used for Pages"
+                if e.status == 400 and "commit to be used for Pages" in str(e.data):
+                    print(f"Failed to enable Pages for {full_repo_name} due to missing commit on 'main'. Repo might be empty or branch not pushed. Error: {e.data.get('message')}")
+                    raise GitHubRepoError(f"Failed to enable Pages for {full_repo_name}: 'main' branch needs a commit. {e.data.get('message')}")
+                print(f"Error enabling GitHub Pages for {full_repo_name}: {str(e)}. Data: {e.data}")
+                raise GitHubRepoError(f"Failed to enable GitHub Pages for {full_repo_name}: {str(e)}")
+
+            # Construct the expected GitHub Pages URL
+            # It might take a moment for the Pages site to be fully live and URL to be reported by API.
+            pages_url = f"https://{target_user_for_repo_creation.login}.github.io/{repo_name}/"
+            print(f"Expected GitHub Pages URL: {pages_url}")
+
+            return full_repo_name, pages_url
+
+        except UnknownObjectException as e:
+            print(f"ERROR:create_pages_repository:User/Org '{user_login}' not found: {str(e)}")
+            raise GitHubAuthError(f"GitHub user or organization '{user_login}' not found or not accessible by the app installation.")
         except GithubException as e:
             error_message = e.data.get("message", str(e)) if hasattr(e, 'data') and e.data else str(e)
-            if hasattr(e, 'data') and e.data and e.data.get("errors"):
-                error_message += f" Details: {e.data.get('errors')}"
-            print(f"ERROR:create_pages_repository:GithubException: {error_message}")
-            raise GitHubRepoError(f"Failed to create GitHub Pages repository '{user_login}/{repo_name}': {error_message}")
+            if e.status == 422 and "name already exists" in error_message:
+                 print(f"ERROR:create_pages_repository:Repository {user_login}/{repo_name} already exists (caught as 422): {error_message}")
+                 # This case might be handled by the get_repo check earlier, but good to have a catch-all.
+                 # We can attempt to get the existing repo and proceed if that's desired behavior.
+                 # For now, re-raising as a specific error.
+                 raise GitHubRepoError(f"Repository '{user_login}/{repo_name}' already exists.")
+            print(f"ERROR:create_pages_repository:GithubException for {user_login}/{repo_name}: {error_message}")
+            raise GitHubRepoError(f"Failed to create repository '{user_login}/{repo_name}': {error_message}")
         except Exception as e:
-            print(f"ERROR:create_pages_repository:Exception: {str(e)}")
-            # Consider logging the full traceback here for better diagnostics
-            # import traceback
-            # print(traceback.format_exc())
-            raise GitHubRepoError(f"An unexpected error occurred while creating repository '{user_login}/{repo_name}': {str(e)}")
+            print(f"ERROR:create_pages_repository:Exception for {user_login}/{repo_name}: {str(e)}")
+            import traceback
+            print(traceback.format_exc())
+            raise GitHubRepoError(f"An unexpected error occurred while creating repository for '{user_login}/{repo_name}': {str(e)}")
 
     def _push_template_to_repo(
         self,
-        installation_access_token: str,
-        owner_login: str,
-        repo: Github.Repository.Repository,
+        installation_access_token: str, 
+        owner_login: str, # Added for clarity, should match repo.owner.login
+        repo: Repository, # Corrected type hint
         template_path: Path
     ) -> None:
         """
@@ -471,7 +519,7 @@ class GitHubService:
         """
         try:
             g = Github(auth=GithubAuth.Token(installation_access_token))
-            repo = g.get_repo(full_repo_name) 
+            repo: Repository = g.get_repo(full_repo_name) # Corrected type hint
             
             default_branch_name = repo.default_branch
             ref_str = f"refs/heads/{default_branch_name}"
@@ -485,7 +533,7 @@ class GitHubService:
                 # PyGithub's create_git_blob typically handles string content with utf-8 encoding.
                 blob_sha = repo.create_git_blob(content_str, "utf-8").sha
                 tree_elements.append(
-                    Github.InputGitTreeElement(
+                    InputGitTreeElement( # Changed from Github.InputGitTreeElement
                         path=file_path,
                         mode='100644', # blob (file)
                         type='blob',
@@ -539,7 +587,7 @@ class GitHubService:
             # import traceback
             # print(traceback.format_exc())
             raise GitHubRepoError(f"An unexpected error occurred while updating repository '{full_repo_name}': {str(e)}")
-    
+
     def get_pages_build_status(self, installation_access_token: str, full_repo_name: str) -> Dict[str, Any]:
         """
         Get the status of GitHub Pages build using an installation token.
@@ -556,15 +604,15 @@ class GitHubService:
         """
         try:
             g = Github(auth=GithubAuth.Token(installation_access_token))
-            repo = g.get_repo(full_repo_name)
+            repo: Repository = g.get_repo(full_repo_name) # Corrected type hint
             
             # Get Pages site information
-            pages_info = repo.get_pages() # PyGithub method for getting site info
+            pages_info = repo.get_pages() # PyGithub method for getting site info # Removed type hint: PagesInfo
             
             # Get latest Pages build (if available)
-            latest_build = None
+            latest_build = None # Removed type hint: Optional[PagesBuild]
             # repo.get_pages_builds() returns a PaginatedList of PagesBuild objects
-            builds_iterator = repo.get_pages_builds()
+            builds_iterator = repo.get_pages_builds() # Removed type hint: PaginatedList[PagesBuild]
             if builds_iterator.totalCount > 0:
                 # The list is typically ordered with the latest build first
                 latest_build = builds_iterator[0] 

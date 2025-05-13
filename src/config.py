@@ -26,10 +26,20 @@ GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "models/gemini-2.0-flash")
 GEMINI_MAX_TOKENS: int = int(os.getenv("GEMINI_MAX_TOKENS", "500"))
 GEMINI_TEMPERATURE: float = float(os.getenv("GEMINI_TEMPERATURE", "0.7"))
 
-# GitHub Configuration
-GITHUB_CLIENT_ID: str = os.getenv("GITHUB_CLIENT_ID", "")
-GITHUB_CLIENT_SECRET: str = os.getenv("GITHUB_CLIENT_SECRET", "")
-GITHUB_CALLBACK_URL: str = os.getenv("GITHUB_CALLBACK_URL", "http://localhost:8000/callback")
+# GitHub Configuration - Old OAuth (to be removed or verified if still needed elsewhere)
+# GITHUB_CLIENT_ID: str = os.getenv("GITHUB_CLIENT_ID", "") # Replaced by GITHUB_APP_CLIENT_ID
+# GITHUB_CLIENT_SECRET: str = os.getenv("GITHUB_CLIENT_SECRET", "") # Replaced by GITHUB_APP_CLIENT_SECRET
+# GITHUB_CALLBACK_URL: str = os.getenv("GITHUB_CALLBACK_URL", "http://localhost:8000/callback") # Replaced by GITHUB_APP_INSTALLATION_CALLBACK_URL
+
+# GitHub App Configuration
+GITHUB_APP_ID: str = os.getenv("GITHUB_APP_ID", "")
+GITHUB_APP_NAME: str = os.getenv("GITHUB_APP_NAME", "QuickfolioApp") # Default if not set
+GITHUB_APP_CLIENT_ID: str = os.getenv("GITHUB_APP_CLIENT_ID", "") # Specific App Client ID
+GITHUB_APP_CLIENT_SECRET: str = os.getenv("GITHUB_APP_CLIENT_SECRET", "") # Specific App Client Secret
+GITHUB_APP_PRIVATE_KEY_PATH: str = os.getenv("GITHUB_APP_PRIVATE_KEY_PATH", "") # Path to your .pem file
+# Ensure this URL matches the "Callback URL" and "Setup URL" (if applicable) in your GitHub App settings.
+# The /github/app/callback endpoint in app.py handles this.
+GITHUB_APP_INSTALLATION_CALLBACK_URL: str = os.getenv("GITHUB_APP_INSTALLATION_CALLBACK_URL", "http://localhost:8000/api/github/app/callback")
 
 # Application Settings
 DEBUG: bool = os.getenv("DEBUG", "True").lower() in ("true", "1", "t")
