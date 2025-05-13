@@ -1,6 +1,8 @@
 # Environment variables
 .env
 
+# GitHub App private key
+*.pem
 # Python
 __pycache__/
 *.py[cod]
