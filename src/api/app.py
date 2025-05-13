@@ -9,9 +9,9 @@ import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, Depends
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, Depends, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from pydantic import HttpUrl
@@ -137,7 +137,7 @@ class MVPContentGenerationResponse(BaseModel):
     debug_info: Optional[Dict[str, Any]] = None  # Debug information # For storing detailed prompt/response for AI debugging
 
 
-@app.get("/")
+@app.get("/", tags=["General"])
 async def root():
     """Root endpoint that returns API information."""
     return {
@@ -414,7 +414,7 @@ async def github_callback(code: str, state: Optional[str] = None):
         state: State parameter for security validation
         
     Returns:
-        User information and access token
+        Redirect to frontend with user information and access token
     """
     try:
         # Exchange code for token
@@ -423,63 +423,218 @@ async def github_callback(code: str, state: Optional[str] = None):
         # Get user info
         user = github_service.get_user_info(access_token)
         
-        return {
+        # Create a parameter string with user data
+        user_data = {
             "username": user.username,
-            "name": user.name,
+            "name": user.name or user.username,
             "avatar_url": user.avatar_url,
-            "access_token": access_token,  # In production, don't expose this
+            "access_token": access_token  # In production, don't expose this
         }
+        
+        # Redirect to frontend with data
+        # Frontend URL hardcoded for simplicity - in production use an env var
+        frontend_url = "http://localhost:3000/deploy-callback"
+        query_params = "?" + "&".join([f"{k}={v}" for k, v in user_data.items() if v])
+        redirect_url = frontend_url + query_params
+        
+        return RedirectResponse(url=redirect_url)
     except GitHubAuthError as e:
-        raise HTTPException(status_code=401, detail=str(e))
+        # Redirect to frontend with error
+        error_url = f"http://localhost:3000/deploy-callback?error={str(e)}"
+        return RedirectResponse(url=error_url)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error during GitHub authentication: {str(e)}")
+        logger.error(f"Error in GitHub callback: {str(e)}", exc_info=True)
+        error_url = f"http://localhost:3000/deploy-callback?error=Server+error"
+        return RedirectResponse(url=error_url)
+
+
+# --- GitHub App Installation Flow --- 
+
+@app.get("/github/app/install", tags=["GitHub App"])
+async def github_app_install_redirect(request: Request):
+    """
+    Redirects the user to the GitHub App installation page.
+    Generates the installation URL for the Quickfolio GitHub App.
+    """
+    try:
+        # The state parameter is optional for get_github_app_installation_url
+        # If you want to use it for CSRF protection, generate a unique state, 
+        # store it in the user's session, and verify it in the callback.
+        # For simplicity, we're not implementing state validation here yet.
+        installation_url = github_service.get_github_app_installation_url()
+        logger.info(f"Redirecting to GitHub App installation URL: {installation_url}")
+        return RedirectResponse(url=installation_url)
+    except Exception as e:
+        logger.error(f"Error generating GitHub App installation URL: {str(e)}", exc_info=True)
+        # Redirect to a frontend page with an error message
+        # Ensure your frontend can handle this query parameter for error display.
+        error_redirect_url = "http://localhost:3000/create?error=app_install_url_failed"
+        return RedirectResponse(url=error_redirect_url, status_code=302) # Use 302 for temporary redirect
+
+
+class GitHubAppCallbackQueryParams(BaseModel):
+    """Query parameters expected from GitHub App callback."""
+    code: Optional[str] = None
+    installation_id: Optional[int] = None
+    setup_action: Optional[str] = None # e.g., "install", "update"
+    state: Optional[str] = None # If state was used in the installation URL
+
+
+@app.get("/github/app/callback", tags=["GitHub App"])
+async def github_app_callback(
+    request: Request, # FastAPI request object for session access, etc.
+    params: GitHubAppCallbackQueryParams = Depends() # Dependency injection for query params
+):
+    """
+    Handles the callback from GitHub after a user installs or configures the GitHub App.
+    Receives the installation_id which is crucial for making API calls on behalf of the installation.
+    """
+    logger.info(
+        f"GitHub App Callback received: installation_id={params.installation_id}, "
+        f"setup_action={params.setup_action}, code={params.code}, state={params.state}"
+    )
+
+    # TODO: Implement state validation if CSRF protection state was used in /github/app/install
+    # if not github_service.validate_state(params.state, request.session.pop('github_oauth_state', None)):
+    #     raise HTTPException(status_code=403, detail="Invalid OAuth state.")
+
+    frontend_target_url = "http://localhost:3000/create" # Target frontend page
+
+    if params.installation_id:
+        # Successfully received installation_id
+        logger.info(f"GitHub App installation event: ID={params.installation_id}, Action={params.setup_action}")
+        
+        # Store installation_id: This is critical. How you store it depends on your app's architecture.
+        # Option 1: Session (requires SessionMiddleware)
+        # request.session['github_installation_id'] = params.installation_id
+        # logger.info(f"Stored installation_id {params.installation_id} in session.")
+
+        # Option 2: If your app uses user accounts, associate installation_id with the user's account in your DB.
+
+        # Option 3: For stateless operation or to immediately pass to client, redirect with it.
+        # The client would then store it (e.g., localStorage) and send it with subsequent API requests (like /deploy).
+        redirect_query_params = f"?installation_id={params.installation_id}"
+        if params.setup_action:
+            redirect_query_params += f"&setup_action={params.setup_action}"
+        
+        # You might want to fetch initial user/installation details here if needed
+        # try:
+        #     token_info = github_service.get_installation_access_token(params.installation_id)
+        #     installation_token = token_info[0]
+        #     # Example: Fetch owner info if your service supports it
+        #     # owner_info = github_service.get_installation_owner_info(installation_token)
+        #     # logger.info(f"App installed for: {owner_info}")
+        #     # request.session['github_installation_owner_login'] = owner_info.login
+        # except Exception as e:
+        #     logger.error(f"Could not retrieve token or info for installation {params.installation_id}: {e}")
+            # Decide how to handle this - redirect with error or just log and continue?
+
+        logger.info(f"Redirecting to frontend: {frontend_target_url}{redirect_query_params}")
+        return RedirectResponse(url=f"{frontend_target_url}{redirect_query_params}")
+    
+    elif params.code and params.state: # This scenario is usually for 'Request user authorization (OAuth) during installation'
+        # This 'code' is part of the GitHub App's own OAuth flow, distinct from a separate OAuth App flow.
+        # It's used to get a user token specific to the app installation.
+        logger.info(f"GitHub App callback received OAuth code for user authorization: {params.code}")
+        # You would typically exchange this code for a user token using a method like:
+        # user_app_token_data = await github_service.exchange_user_auth_code_for_app_token(params.code, params.state)
+        # Then store this token, possibly linking it to the user and installation_id.
+        # For now, redirecting with a status.
+        return RedirectResponse(url=f"{frontend_target_url}?status=app_user_auth_code_received")
+
+    else:
+        logger.error(f"GitHub App Callback error: Missing critical parameters. Query: {request.query_params}")
+        return RedirectResponse(url=f"{frontend_target_url}?error=app_callback_invalid_params")
 
 
 @app.post("/deploy", response_model=DeploymentResponse)
 async def deploy_portfolio(
-    access_token: str = Form(...),
-    resume_data: str = Form(...),
-    generated_content: str = Form(...),
-    theme: str = Form("minimal"),
+    installation_id: int = Form(...),      # New: From GitHub App installation
+    user_login: str = Form(...),           # New: GitHub username of the installer
+    generated_content: str = Form(...),    # Assuming this contains structured data like MVPContentData as JSON string
+    theme: str = Form("lynx"),             # Defaulting to 'lynx' from memory
+    repo_name: str = Form(...),            # Now required, no longer optional or using user.login.github.io
+    portfolio_description: Optional[str] = Form("My Quickfolio-generated portfolio site"),
+    private_repo: bool = Form(False)
 ):
     """
-    Deploy portfolio site to GitHub Pages.
+    Deploy portfolio site to GitHub Pages using GitHub App installation.
     
     Args:
-        access_token: GitHub OAuth access token
-        resume_data: JSON string of resume data
-        generated_content: JSON string of generated content
-        theme: Theme to use for the portfolio
+        installation_id: GitHub App installation ID.
+        user_login: GitHub username of the account where the app is installed.
+        generated_content: JSON string of portfolio content (e.g., MVPContentData).
+        theme: Theme to use for the portfolio.
+        repo_name: Desired repository name (e.g., "my-portfolio").
+        portfolio_description: Description for the new repository.
+        private_repo: Whether the repository should be private.
         
     Returns:
-        Deployment information
+        Deployment information (repository URL and GitHub Pages URL).
     """
+    logger.info(
+        f"Deployment request: installation_id={installation_id}, user_login='{user_login}', "
+        f"repo_name='{repo_name}', theme='{theme}', private={private_repo}"
+    )
+
     try:
-        import json
-        resume_json = json.loads(resume_data)
-        content_json = json.loads(generated_content)
+        # 1. Get installation access token for the given installation_id
+        token_info = github_service.get_installation_access_token(installation_id)
+        installation_access_token = token_info[0] # The token string
+        # token_expires_at = token_info[1] # Expiration datetime, useful for caching if needed
+        logger.info(f"Obtained installation access token for installation_id: {installation_id}")
+
+        # 2. Prepare template path (this needs to be robust)
+        #    The 'theme' parameter should map to a directory in TEMPLATES_DIR
+        #    For now, assuming 'theme' directly corresponds to a subdirectory name.
+        #    E.g., if TEMPLATES_DIR is 'src/templates' and theme is 'lynx', path is 'src/templates/lynx'
+        #    This path should contain the actual site files (HTML, CSS, JS, images, .github/workflows/*)
+        selected_template_path = TEMPLATES_DIR / theme
+        if not selected_template_path.is_dir():
+            logger.error(f"Theme template directory not found: {selected_template_path}")
+            raise HTTPException(status_code=400, detail=f"Theme '{theme}' not found.")
+        logger.info(f"Using template path: {selected_template_path}")
         
-        # Get user info
-        user = github_service.get_user_info(access_token)
-        
-        # Create GitHub Pages repository
-        template_path = TEMPLATES_DIR
-        site_url = github_service.create_pages_repository(access_token, template_path)
-        
-        # TODO: Implement actual content deployment
+        # TODO: Actual content processing using `generated_content` and `theme`.
+        # For now, we are focused on the GitHub interaction part.
         # This would involve:
-        # 1. Generating Hugo content files from resume_json and content_json
-        # 2. Applying the selected theme
-        # 3. Pushing the files to the GitHub repository
+        # 1. Parsing `generated_content` (JSON string) into Python objects (e.g., MVPContentData).
+        # 2. Using a theme-specific generator to create the actual HTML/config files 
+        #    and place them into a temporary directory that will be used by `_push_template_to_repo`.
+        #    The `template_path` argument for `create_pages_repository` would then point to this temporary directory.
+        #    For this step, let's assume `selected_template_path` *is* the directory with final files.
+        
+        # 3. Create GitHub Pages repository and push the template content
+        repo_html_url, pages_url = github_service.create_pages_repository(
+            installation_access_token=installation_access_token,
+            user_login=user_login,
+            repo_name=repo_name,
+            template_path=selected_template_path, # This should be the path to the fully generated site files
+            description=portfolio_description,
+            private=private_repo
+        )
+        
+        logger.info(f"Repository created: {repo_html_url}, Pages URL: {pages_url}")
         
         return DeploymentResponse(
-            deployment_url=site_url,
-            repository_url=f"https://github.com/{user.username}/{user.username}.github.io",
-            message="Portfolio successfully deployed",
+            deployment_url=pages_url, # The live GitHub Pages URL
+            repository_url=repo_html_url, # The URL of the GitHub repository itself
+            message=f"Portfolio site '{repo_name}' deployment initiated successfully."
         )
+        
+    except GitHubAuthError as e:
+        logger.error(f"GitHub Auth Error during deployment: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=401, detail=f"GitHub authentication error: {str(e)}")
     except GitHubRepoError as e:
+        logger.error(f"GitHub Repo Error during deployment: {str(e)}", exc_info=True)
+        # More specific error for already existing repo could be handled here if desired
+        if "already exists" in str(e):
+             raise HTTPException(status_code=409, detail=str(e)) # 409 Conflict
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise # Re-raise HTTPException to preserve its status code and detail
     except Exception as e:
+        logger.error(f"Unexpected error during deployment: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error deploying portfolio: {str(e)}")
 
 
