@@ -570,8 +570,8 @@ ${link.type ? `  type = "${link.type}"` : ''}
   
   /**
    * Handle deployment to GitHub Pages
-   * Uses the GitHub token from localStorage to create a repository
-   * and deploy the generated portfolio
+   * Uses the GitHub App installation and a pre-selected repository
+   * to deploy the generated portfolio with least-privilege permissions
    */
   const handleDeploy = async (): Promise<void> => {
     if (!mvpContent) {
@@ -580,16 +580,18 @@ ${link.type ? `  type = "${link.type}"` : ''}
     }
     if (!formState.installationId) {
       setDeploymentError('GitHub App not installed or installation ID missing. Please connect GitHub by clicking the button above.');
-      // Optionally, redirect to install flow if not already clear
-      // window.location.href = '/api/github/app/install';
       return;
     }
     if (!formState.userLogin.trim()) {
       setDeploymentError('GitHub Username is required.');
       return;
     }
-    if (!formState.repoName.trim()) {
-      setDeploymentError('Repository Name is required.');
+    if (!selectedRepoFullName) {
+      setDeploymentError('Please select a GitHub repository using the repository selector above.');
+      return;
+    }
+    if (repoValidationError && !githubRepoId) {
+      setDeploymentError(`Repository validation failed: ${repoValidationError}. Please select a valid repository.`);
       return;
     }
 
@@ -597,11 +599,18 @@ ${link.type ? `  type = "${link.type}"` : ''}
     setDeploymentError(null);
     setDeploymentSuccess(null);
 
+    // Parse repository information from selectedRepoFullName
+    const [owner, repo] = selectedRepoFullName.includes('/') 
+      ? selectedRepoFullName.split('/') 
+      : [formState.userLogin, selectedRepoFullName]; // For username.github.io case
+
     const formData = new FormData();
     formData.append('installation_id', formState.installationId.toString());
-    formData.append('user_login', formState.userLogin);
-    formData.append('repo_name', formState.repoName);
-    formData.append('generated_content', JSON.stringify(mvpContent)); // Send the full MVP content
+    formData.append('user_login', owner); // Use the owner from selectedRepoFullName if available
+    formData.append('repo_name', repo); // Use the repo from selectedRepoFullName if available
+    formData.append('full_repo_name', selectedRepoFullName); // Add the full repo name for clarity
+    formData.append('repository_id', githubRepoId || ''); // Add repository ID if available
+    formData.append('generated_content', JSON.stringify(mvpContent));
     formData.append('theme', formState.themeId);
     formData.append('portfolio_description', formState.portfolioDescription);
     formData.append('private_repo', formState.isPrivateRepo.toString());
