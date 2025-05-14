@@ -29,6 +29,18 @@ from pydantic import ValidationError
 # Import models from their new location
 from src.models.mvp_model import ProfileData, CustomUrl, LinkData, MVPContentData
 
+# New model for repository validation
+class RepositoryValidationRequest(BaseModel):
+    """Request model for repository validation"""
+    repoFullName: str
+    githubUsername: str
+
+class RepositoryValidationResponse(BaseModel):
+    """Response model for repository validation"""
+    repositoryId: int
+    exists: bool
+    message: str
+
 # Assuming a theme engine/manager exists or will be created
 # This will be responsible for taking MVPContentData and a theme_id
 # and returning a dictionary of {filepath: content_string}
@@ -638,6 +650,36 @@ async def list_themes():
     """
     from src.config import AVAILABLE_THEMES
     return {"themes": AVAILABLE_THEMES}
+
+
+@app.post("/api/github/validate-repository", response_model=RepositoryValidationResponse, tags=["GitHub"])
+async def validate_repository(request: RepositoryValidationRequest):
+    """
+    Validate if a GitHub repository exists and return its ID.
+    This is a mock implementation that always returns success for testing.
+    
+    Args:
+        request: Contains repoFullName (e.g. 'username/repo') and githubUsername
+        
+    Returns:
+        Repository ID and existence status
+    """
+    logger.info(f"Repository validation requested for: {request.repoFullName} by {request.githubUsername}")
+    
+    # MOCK IMPLEMENTATION - In production, this would check with GitHub API
+    # TODO: Implement actual GitHub API call to validate repository existence
+    #       and fetch the real repository ID using github_service
+    
+    # For testing purposes, generate a stable mock ID based on the repo name
+    # This ensures the same repo name always gets the same ID during testing
+    import hashlib
+    mock_id = int(hashlib.md5(request.repoFullName.encode()).hexdigest(), 16) % 10000000
+    
+    return RepositoryValidationResponse(
+        repositoryId=mock_id,
+        exists=True,  # Always true in this mock version
+        message=f"Repository '{request.repoFullName}' validated successfully."
+    )
 
 
 def start():
