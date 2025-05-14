@@ -120,6 +120,10 @@ portfolio_site/
 *.pem:Zone.Identifier
 web/.env.local
 
+# Root-level Node.js files (not part of main application)
+/package.json
+/package-lock.json
+
 # Quickfolio specific temporary files
 temp_uploads/
 */temp_uploads/
