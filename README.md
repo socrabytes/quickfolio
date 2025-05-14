@@ -61,10 +61,14 @@ python main.py api
 # The API will be available at http://localhost:8000
 ```
 
-#### Option 3: Web Interface (In Development)
+#### Option 3: Web Interface (Deployed)
+
+Quickfolio is now deployed and available at:
+- **Frontend:** https://quickfolio.onrender.com
+- **API:** https://quickfolio-api.onrender.com
 
 ```bash
-# Run the Next.js development server
+# For local development, run the Next.js development server
 cd web
 npm install
 npm run dev
@@ -72,23 +76,26 @@ npm run dev
 # The landing page will be available at http://localhost:3000
 ```
 
-To test the portfolio creation wizard:
-1. Start the API server: `python main.py api`
-2. In another terminal, start the web UI: `cd web && npm run dev`
-3. Visit http://localhost:3000 and click "Create Portfolio"
-4. Follow the step-by-step wizard:
+To use the portfolio creation wizard:
+1. Visit https://quickfolio.onrender.com and click "Create Portfolio"
+2. Follow the step-by-step wizard:
    - Upload your resume content.
    - Select a theme from the available options.
    - Customize your portfolio details.
    - Preview your site.
-   - Deploy to GitHub.
+   - Deploy to GitHub Pages.
+
+For local development, start both the API server (`python main.py api`) and the web UI (`cd web && npm run dev`).
 
 Currently implemented web features:
 - Resume upload and parsing UI
 - Theme selection with visual previews
 - Portfolio customization interface
-- GitHub OAuth integration for one-click deployment
+- GitHub App integration for deployment
 - API service layer connecting frontend to backend
+- Deployed environment on Render
+
+See [PROJECT_STATUS.md](docs/PROJECT_STATUS.md) for detailed information about the current state of the project, including deployment details and upcoming improvements.
 
 ### Testing
 
@@ -181,23 +188,26 @@ See existing themes for examples of implementation patterns.
 ## 🚀 Development Roadmap
 
 ### Phase 0: MVP (14 Days) - Completed
-- GitHub OAuth → repo creation
 - Resume PDF parsing
-- OpenAI integration for bio/projects
+- AI integration for bio/projects (using Google Gemini)
 - Minimal Hugo theme
-- GitHub Actions deployment
+- GitHub integration for static site deployment
+- Basic web UI
 
 ### Phase 1: Public Alpha - In Progress
-- ✅ GitHub OAuth integration
+- ✅ GitHub App integration (replacing OAuth)
 - ✅ CLI-less onboarding UI
 - ✅ Multiple theme options with visual previews
-- 🔄 Custom domain wizard (next focus)
+- ✅ Deployment to Render (frontend & API)
+- 🔄 Security-first permission model redesign
+- 🔄 Custom domain wizard
 - 🔄 Lite hosting plan option
 
 ### Phase 2: Content Sync - Planned
 - GitHub activity integration
 - Dribbble shots gallery
 - Medium/blog RSS feed
+- Portfolio analytics
 
 ## 📊 Key Metrics
 - Time-to-Live Site (target: <120 seconds)

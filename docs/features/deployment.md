@@ -13,21 +13,12 @@ Quickfolio uses a two-service architecture deployed on Render:
 - **Start Command:** `uvicorn src.api.app:app --host 0.0.0.0 --port $PORT`
 
 #### Environment Variables
-- `GITHUB_APP_ID`
-- `GITHUB_APP_CLIENT_ID`
-- `GITHUB_APP_CLIENT_SECRET`
-- `GITHUB_APP_PRIVATE_KEY_PATH`
-- `GITHUB_APP_INSTALLATION_CALLBACK_URL`
-- `GITHUB_APP_NAME`
-- `GEMINI_API_KEY`
-- `GEMINI_MODEL`
-- `GEMINI_MAX_TOKENS`
-- `GEMINI_TEMPERATURE`
-- `DEBUG`
-- `PORT`
-- `HOST`
-- `MAX_PDF_SIZE_MB`
-- `CACHE_EXPIRY_SECONDS`
+- GitHub App configuration variables
+- AI generation API settings
+- Server configuration (debug, port, host)
+- Content generation settings
+
+See `.env.example` for the complete list of required variables.
 
 ### Frontend (Next.js)
 
