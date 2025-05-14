@@ -47,15 +47,20 @@ const RepoSelector: React.FC<RepoSelectorProps> = ({ onRepoSelected, githubUsern
           onChange={handleRepoTypeChange}
           className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
         >
-          <option value="projectPage">Project Site (e.g., {githubUsername}/my-portfolio)</option>
+          <option value="projectPage">Project Repository (e.g., {githubUsername}/my-portfolio)</option>
           <option value="userPage">User/Organization Site (e.g., {githubUsername}.github.io)</option>
         </select>
+        <p className="text-xs text-gray-400 mt-1">
+          {repoType === 'userPage' 
+            ? `This will be your main GitHub Pages site at ${githubUsername}.github.io` 
+            : `This will deploy to ${githubUsername}.github.io/[repository-name]`}
+        </p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-3">
         <div>
           <label htmlFor="repoName" className="block text-sm font-medium text-gray-300 mb-1">
-            {repoType === 'projectPage' ? 'Repository Name:' : 'User/Org Page Name:'}
+            {repoType === 'projectPage' ? 'Repository Name:' : 'GitHub Pages Site:'}
           </label>
           <div className="flex rounded-md shadow-sm">
             {repoType === 'projectPage' && (
