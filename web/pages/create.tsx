@@ -936,7 +936,7 @@ ${link.type ? `  type = "${link.type}"` : ''}
                 {selectedRepoFullName && (
                   <div className="mt-6 text-center">
                     <p className="text-gray-600 mb-3">
-                      You've selected: <strong className="text-indigo-600">{selectedRepoFullName}</strong>.
+                      You&apos;ve selected: <strong className="text-indigo-600">{selectedRepoFullName}</strong>.
                       Now, install the Quickfolio GitHub App for this repository.
                     </p>
                     <a

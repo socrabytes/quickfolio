@@ -103,7 +103,7 @@ const RepoSelector: React.FC<RepoSelectorProps> = ({ onRepoSelected, githubUsern
         </div>
       </form>
       <p className="text-xs text-gray-400">
-        Quickfolio needs access to a specific repository. If you don't have one yet, you can create it on GitHub.
+        Quickfolio needs access to a specific repository. If you don&apos;t have one yet, you can create it on GitHub.
         The app will later request permission for this single repository.
       </p>
     </div>
