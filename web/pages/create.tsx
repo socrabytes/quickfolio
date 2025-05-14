@@ -258,10 +258,26 @@ const Create: NextPage = () => {
 
   // Handler for when a repository is selected or its name is confirmed
   const handleRepoSelected = async (repoFullName: string) => {
+    console.log('Repository selected:', repoFullName);
     setSelectedRepoFullName(repoFullName);
     localStorage.setItem('selected_repo_full_name', repoFullName);
     setRepoValidationError(null); // Clear previous errors
     setGithubRepoId(null); // Reset repo ID
+    
+    // When a new repository is selected, we should:
+    // 1. Clear the existing installation if it's for a different repository
+    // 2. Force a new GitHub authentication flow
+    // This ensures the installationId has proper access to this specific repository
+    
+    // Reset installation state for new repository selection
+    // This is critical - we don't want to reuse an installation for a different repo
+    if (formState.installationId) {
+      console.log('Clearing existing installation ID for new repository selection');
+      setFormState(prev => ({ ...prev, installationId: null }));
+      localStorage.removeItem('github_installation_id');
+      setDeploymentError(null); // Clear any previous deployment errors
+    }
+    
     // Ensure the installation URL points back to the create page for callback handling
     const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://quickfolio.onrender.com';
     const redirectUri = `${currentOrigin}/create`;
