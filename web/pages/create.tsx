@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
 import { NextPage } from 'next';
 import Head from 'next/head';
 import Header from '../components/Header';
@@ -47,6 +48,12 @@ interface FormState {
   resumeText: string;
   tone: string;
   themeId: string;
+  // New state for GitHub App integration
+  installationId: number | null;
+  userLogin: string;
+  repoName: string;
+  portfolioDescription: string;
+  isPrivateRepo: boolean;
 }
 
 const Create: NextPage = () => {
@@ -59,6 +66,11 @@ const Create: NextPage = () => {
     resumeText: '',
     tone: 'professional',
     themeId: getDefaultThemeId(), // Use default theme from registry
+    installationId: null,
+    userLogin: '',
+    repoName: '',
+    portfolioDescription: 'My Quickfolio-generated portfolio site',
+    isPrivateRepo: false,
   });
   
   // Resume upload handling (file) - keep for now, but focus on text input for MVP
@@ -71,6 +83,94 @@ const Create: NextPage = () => {
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false); // For copy button feedback
   
+  // For GitHub deployment errors
+  const [deploymentError, setDeploymentError] = useState<string | null>(null);
+  const [isDeploying, setIsDeploying] = useState(false); // For deployment loading state
+  const [deploymentSuccess, setDeploymentSuccess] = useState<string | null>(null);
+
+  // Add router to handle URL parameters
+  const router = useRouter();
+  
+  // Handle URL parameters for step, error, and installation_id
+  useEffect(() => {
+    if (!router.isReady) return;
+    
+    const { query } = router;
+
+    // Check if we need to set a specific step
+    if (query.step) {
+      const step = query.step as CreationStep;
+      if (['upload', 'customize', 'theme', 'preview', 'deploy'].includes(step)) {
+        setCurrentStep(step);
+      }
+      
+      // If we're on the deploy step and have a success parameter, check for content in localStorage
+      if (step === 'deploy') {
+        if (query.success === 'true') {
+            const savedContent = localStorage.getItem('mvp_content');
+            if (savedContent) {
+              try {
+                const parsedContent = JSON.parse(savedContent) as MVPContentData;
+                setMvpContent(parsedContent);
+              } catch (e) {
+                console.error('Failed to parse content from localStorage:', e);
+              }
+            }
+        }
+        // Pre-fill userLogin from localStorage if available (e.g., from a previous session)
+        const storedUserLogin = localStorage.getItem('github_user_login');
+        if (storedUserLogin) {
+          setFormState(prev => ({ ...prev, userLogin: storedUserLogin }));
+        }
+      }
+    }
+    
+    // Check for error parameter from backend redirects
+    if (query.error) {
+      // Distinguish between general errors and GitHub App specific errors
+      if (query.error === 'app_install_url_failed' || query.error === 'app_callback_invalid_params') {
+        setDeploymentError(`GitHub App setup failed: ${query.error_description || query.error}`);
+      } else {
+        setDeploymentError(query.error as string);
+      }
+    }
+
+    // Check for installation_id from GitHub App callback
+    if (query.installation_id) {
+      const instId = parseInt(query.installation_id as string, 10);
+      if (!isNaN(instId)) {
+        setFormState(prev => ({ ...prev, installationId: instId }));
+        console.log(`GitHub App Installation ID received: ${instId}`);
+        // Optionally, you can store this in localStorage if user navigates away and comes back
+        localStorage.setItem('github_installation_id', instId.toString());
+        // If successfully installed, move to deploy step automatically if content is ready
+        if (mvpContent || localStorage.getItem('mvp_content')) {
+          setCurrentStep('deploy');
+        } else {
+          // If no content, maybe go to customize or stay to allow user to generate content
+          // For now, let's assume content should be generated first
+          // setCurrentStep('customize'); 
+        }
+        // Clean up URL query parameters after processing
+        const { pathname, query: currentQuery } = router;
+        delete currentQuery.installation_id;
+        delete currentQuery.setup_action; // if you also handle setup_action
+        router.replace({ pathname, query: currentQuery }, undefined, { shallow: true });
+      }
+    }
+
+  }, [router.isReady, router.query, mvpContent]); // Added mvpContent to deps
+
+  // Load installationId from localStorage on initial mount if not in query
+  useEffect(() => {
+    if (!formState.installationId) {
+      const storedInstallationId = localStorage.getItem('github_installation_id');
+      if (storedInstallationId) {
+        setFormState(prev => ({ ...prev, installationId: parseInt(storedInstallationId, 10) }));
+      }
+    }
+  }, []); // Empty dependency array ensures this runs only on mount
+
   // Theme selection handler
   const handleThemeSelect = (themeId: string) => {
     setFormState((prev: FormState) => ({ ...prev, themeId }));
@@ -90,6 +190,17 @@ const Create: NextPage = () => {
     if (e.target.value.trim() !== '') {
       setUploadError(null); // Clear error if user starts typing
     }
+  };
+
+  // Generic handler for form input changes
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value, type } = e.target;
+    // Need a type assertion for 'checked' property on HTMLInputElement
+    const isCheckbox = type === 'checkbox' && e.target instanceof HTMLInputElement;
+    setFormState(prev => ({
+      ...prev,
+      [name]: isCheckbox ? (e.target as HTMLInputElement).checked : value,
+    }));
   };
 
   const handleFileChange = (e: { target: { files: FileList | null } }) => {
@@ -374,9 +485,83 @@ ${link.type ? `  type = "${link.type}"` : ''}
     
     // Set the demo content and proceed to theme selection
     setMvpContent(demoContent);
+    setIsGenerating(false);
     setCurrentStep('theme');
   };
   
+  /**
+   * Handle deployment to GitHub Pages
+   * Uses the GitHub token from localStorage to create a repository
+   * and deploy the generated portfolio
+   */
+  const handleDeploy = async (): Promise<void> => {
+    if (!mvpContent) {
+      setDeploymentError('No content generated to deploy.');
+      return;
+    }
+    if (!formState.installationId) {
+      setDeploymentError('GitHub App not installed or installation ID missing. Please connect GitHub by clicking the button above.');
+      // Optionally, redirect to install flow if not already clear
+      // window.location.href = '/api/github/app/install';
+      return;
+    }
+    if (!formState.userLogin.trim()) {
+      setDeploymentError('GitHub Username is required.');
+      return;
+    }
+    if (!formState.repoName.trim()) {
+      setDeploymentError('Repository Name is required.');
+      return;
+    }
+
+    setIsDeploying(true);
+    setDeploymentError(null);
+    setDeploymentSuccess(null);
+
+    const formData = new FormData();
+    formData.append('installation_id', formState.installationId.toString());
+    formData.append('user_login', formState.userLogin);
+    formData.append('repo_name', formState.repoName);
+    formData.append('generated_content', JSON.stringify(mvpContent)); // Send the full MVP content
+    formData.append('theme', formState.themeId);
+    formData.append('portfolio_description', formState.portfolioDescription);
+    formData.append('private_repo', formState.isPrivateRepo.toString());
+
+    // The theme's static files (like images, default _index.md if needed)
+    // might need to be handled differently. For now, backend uses template_path from themeId.
+    // The `github_service.create_pages_repository` is expected to copy files from `TEMPLATES_DIR / themeId`
+    // And then `update_repository_content` would be used if we wanted to push AI-generated markdown/HTML files.
+    // For the current Python `create_pages_repository`, it pushes the whole `template_path`.
+    // We need to ensure that `generated_content` is used by the backend to *create* files within that structure.
+    // This part needs careful coordination with backend logic for how content is placed in the repo.
+
+    try {
+      const response = await fetch('/api/deploy', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.detail || `Deployment failed: ${response.statusText}`);
+      }
+
+      setDeploymentSuccess(`Successfully deployed to ${result.deployment_url}!\nRepository: ${result.repository_url}`);
+      console.log('Deployment successful:', result);
+      // Optionally, clear localStorage or redirect to a success page
+      // localStorage.removeItem('mvp_content');
+      // localStorage.removeItem('github_installation_id'); // User might want to deploy another repo
+      // router.push(`/success?url=${result.deployment_url}`);
+
+    } catch (error: any) {
+      console.error('Deployment error:', error);
+      setDeploymentError(error.message || 'An unknown error occurred during deployment.');
+    }
+    setIsDeploying(false);
+  };
+
+
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Head>
@@ -609,11 +794,10 @@ ${link.type ? `  type = "${link.type}"` : ''}
                   </button>
                   
                   <button
-                    // onClick={() => setCurrentStep('deploy')} // Deploy step not yet implemented
-                    onClick={() => alert('Deploy functionality coming soon!')}
+                    onClick={() => setCurrentStep('deploy')}
                     className="px-8 py-3 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors font-semibold"
                   >
-                    Proceed to Deploy (Coming Soon)
+                    Proceed to Deploy
                   </button>
                 </div>
 
@@ -632,28 +816,149 @@ ${link.type ? `  type = "${link.type}"` : ''}
           </div>
         )}
 
-        {/* Step 4: Deploy (Placeholder) */}
+        {/* Step 4: Deploy */}
         {currentStep === 'deploy' && (
           <div className="bg-white p-8 rounded-lg shadow-md">
             <h2 className="text-2xl font-semibold mb-6">Deploy Your Portfolio</h2>
-            <p className="text-gray-600 mb-6">
-              Connect your GitHub account to deploy your new portfolio site. (This step is a placeholder)
-            </p>
-            {/* TODO: Add GitHub OAuth button and deployment logic */}
-            <div className="flex justify-between mt-8">
+            
+            {/* Show deployment error if any */}
+            {deploymentError && (
+              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-md">
+                <p className="text-red-600 font-medium">Error connecting to GitHub:</p>
+                <p className="text-sm text-red-500">{deploymentError}</p>
+              </div>
+            )}
+            {deploymentSuccess && (
+                <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-md">
+                    <p className="text-green-600 font-medium">Deployment Successful!</p>
+                    <p className="text-sm text-green-500 whitespace-pre-wrap">{deploymentSuccess}</p>
+                </div>
+            )}
+            
+            {/* GitHub App Installation status and Deployment Form */}
+            {!formState.installationId ? (
+              <div className="text-center py-6">
+                <p className="text-gray-600 mb-6">
+                  Install the Quickfolio GitHub App to deploy your new portfolio site.
+                </p>
+                <button
+                  onClick={() => window.location.href = '/api/github/app/install'}
+                  className="px-6 py-3 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition-colors flex items-center mx-auto shadow-md"
+                >
+                  <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
+                    <path fillRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clipRule="evenodd" />
+                  </svg>
+                  Install Quickfolio GitHub App
+                </button>
+              </div>
+            ) : (
+              <div>
+                {/* Deployment form when app is installed */} 
+                <div className="mb-6">
+                  <p className="text-gray-600 mb-4">
+                    The Quickfolio GitHub App is installed (ID: {formState.installationId}). Fill in the details to deploy.
+                  </p>
+                  
+                  {/* GitHub Username input */}
+                  <div className="mb-4">
+                    <label htmlFor="userLogin" className="block text-sm font-medium text-gray-700 mb-1">
+                      Your GitHub Username <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      id="userLogin"
+                      name="userLogin"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary shadow-sm"
+                      placeholder="YourGitHubUsername"
+                      value={formState.userLogin}
+                      onChange={handleInputChange}
+                      required
+                    />
+                     <p className="text-xs text-gray-500 mt-1">
+                      The GitHub username where the app was installed.
+                    </p>
+                  </div>
+
+                  {/* Repository name input */}
+                  <div className="mb-4">
+                    <label htmlFor="repoName" className="block text-sm font-medium text-gray-700 mb-1">
+                      New Repository Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      id="repoName"
+                      name="repoName"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary shadow-sm"
+                      placeholder="my-awesome-portfolio"
+                      value={formState.repoName}
+                      onChange={handleInputChange}
+                      required
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      A new repository will be created with this name.
+                    </p>
+                  </div>
+
+                  {/* Portfolio description input */}
+                  <div className="mb-4">
+                    <label htmlFor="portfolioDescription" className="block text-sm font-medium text-gray-700 mb-1">
+                      Portfolio Description
+                    </label>
+                    <input
+                      type="text"
+                      id="portfolioDescription"
+                      name="portfolioDescription"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary shadow-sm"
+                      value={formState.portfolioDescription}
+                      onChange={handleInputChange}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Description for your new portfolio repository.
+                    </p>
+                  </div>
+                  
+                  {/* Private repository toggle */}
+                  <div className="mb-4 flex items-center">
+                    <input
+                      type="checkbox"
+                      id="isPrivateRepo"
+                      name="isPrivateRepo"
+                      className="h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary mr-2"
+                      checked={formState.isPrivateRepo}
+                      onChange={handleInputChange}
+                    />
+                    <label htmlFor="isPrivateRepo" className="text-sm font-medium text-gray-700">
+                      Make Repository Private
+                    </label>
+                  </div>
+                  
+                  {/* Deploy button */} 
+                  <button
+                    onClick={handleDeploy}
+                    disabled={isDeploying || !formState.userLogin || !formState.repoName}
+                    className="w-full px-6 py-3 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors font-semibold shadow-md disabled:opacity-50 flex items-center justify-center"
+                  >
+                    {isDeploying ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Deploying...
+                      </>
+                    ) : 'Deploy to GitHub Pages'}
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            <div className="flex justify-between mt-8 pt-6 border-t border-gray-200">
               <button
                 type="button"
                 onClick={() => setCurrentStep('preview')}
                 className="px-6 py-2 rounded-md font-medium text-gray-700 bg-gray-200 hover:bg-gray-300"
               >
                 Back to Preview
-              </button>
-              <button
-                type="button"
-                // onClick={handleDeploy} // TODO: Implement deployment handler
-                className="px-6 py-2 rounded-md font-medium bg-primary text-white hover:bg-primary-dark"
-              >
-                Deploy Now (Placeholder)
               </button>
             </div>
           </div>

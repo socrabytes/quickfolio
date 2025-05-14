@@ -7,12 +7,14 @@ google-generativeai==0.3.1
 
 # Web framework
 fastapi==0.109.0
-uvicorn==0.27.0
+uvicorn[standard]==0.27.0 # Ensures all optional uvicorn deps are included
 python-multipart==0.0.9
 
 # GitHub integration
 PyGithub==2.2.0
 GitPython==3.1.41
+PyJWT # For generating GitHub App JWTs
+cryptography # RSA signing for JWTs
 
 # Utils
 pydantic==2.5.3

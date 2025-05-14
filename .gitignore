@@ -116,6 +116,10 @@ demo_portfolio/
 generated_portfolio/
 portfolio_site/
 
+# Sensitive files
+*.pem:Zone.Identifier
+web/.env.local
+
 # Quickfolio specific temporary files
 temp_uploads/
 */temp_uploads/

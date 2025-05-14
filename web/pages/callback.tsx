@@ -36,14 +36,23 @@ const Callback: NextPage = () => {
     // Process the authorization code
     const processCode = async () => {
       try {
-        // In a production app, this would be a server-side API call for security
-        // For development, we're directly showing the success state
-        // The actual API call would be something like:
-        // const response = await fetch(`/api/github-callback?code=${code}`);
-        // const data = await response.json();
+        // Make the API call to the backend to exchange the code for a token
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/github/callback?code=${code}`);
         
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.detail || 'Error during GitHub authorization');
+        }
+        
+        const data = await response.json();
+        
+        // Store the token in localStorage for later use
+        localStorage.setItem('github_token', data.access_token);
+        localStorage.setItem('github_user', JSON.stringify({
+          username: data.username,
+          name: data.name,
+          avatar_url: data.avatar_url
+        }));
         
         setStatus('success');
         setMessage('GitHub authorization successful!');
@@ -53,6 +62,7 @@ const Callback: NextPage = () => {
           router.push('/create?step=deploy');
         }, 2000);
       } catch (error) {
+        console.error('GitHub OAuth error:', error);
         setStatus('error');
         setMessage(`Error processing authorization: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
