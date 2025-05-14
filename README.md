@@ -128,6 +128,7 @@ python scripts/test_ai_generator.py path/to/resume_data.json
 │   └── utils/          # Helper functions
 ├── web/                # Landing page (Next.js)
 └── scripts/            # CI/CD and utility scripts
+```
 
 ## 🎨 Theme System
 
