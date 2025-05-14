@@ -588,6 +588,52 @@ class GitHubService:
             # print(traceback.format_exc())
             raise GitHubRepoError(f"An unexpected error occurred while updating repository '{full_repo_name}': {str(e)}")
 
+    def validate_repository(self, owner: str, repo_name: str) -> Tuple[bool, Optional[int], Optional[str]]:
+        """
+        Validate if a repository exists and return its ID.
+        
+        This method uses GitHub's REST API to check if a repository exists and
+        is accessible publicly. No authentication is required for public repos.
+        
+        Args:
+            owner: GitHub username or organization name
+            repo_name: Repository name
+            
+        Returns:
+            Tuple of (exists: bool, repository_id: Optional[int], error_message: Optional[str])
+            If the repository exists, exists will be True and repository_id will be set.
+            If not, exists will be False and error_message may contain details.
+            
+        Raises:
+            GitHubRepoError: If an unexpected error occurs during validation.
+        """
+        try:
+            # For public repositories, we can directly check without authentication
+            # GitHub's REST API endpoint for getting a repository
+            repo_api_url = f"https://api.github.com/repos/{owner}/{repo_name}"
+            headers = {
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28"
+            }
+            
+            response = requests.get(repo_api_url, headers=headers)
+            
+            if response.status_code == 200:
+                # Repository exists and is accessible
+                repo_data = response.json()
+                return True, repo_data.get("id"), None
+            elif response.status_code == 404:
+                # Repository doesn't exist or is private
+                return False, None, "Repository not found or is private"
+            else:
+                # Other API errors
+                error_data = response.json()
+                error_message = error_data.get("message", f"GitHub API error: {response.status_code}")
+                return False, None, error_message
+                
+        except Exception as e:
+            raise GitHubRepoError(f"Failed to validate repository: {str(e)}")
+    
     def get_pages_build_status(self, installation_access_token: str, full_repo_name: str) -> Dict[str, Any]:
         """
         Get the status of GitHub Pages build using an installation token.

@@ -656,7 +656,7 @@ async def list_themes():
 async def validate_repository(request: RepositoryValidationRequest):
     """
     Validate if a GitHub repository exists and return its ID.
-    This is a mock implementation that always returns success for testing.
+    Uses GitHub API to check repository existence and fetch its unique ID.
     
     Args:
         request: Contains repoFullName (e.g. 'username/repo') and githubUsername
@@ -666,20 +666,48 @@ async def validate_repository(request: RepositoryValidationRequest):
     """
     logger.info(f"Repository validation requested for: {request.repoFullName} by {request.githubUsername}")
     
-    # MOCK IMPLEMENTATION - In production, this would check with GitHub API
-    # TODO: Implement actual GitHub API call to validate repository existence
-    #       and fetch the real repository ID using github_service
+    # Parse the repository full name
+    repo_parts = request.repoFullName.split('/')
     
-    # For testing purposes, generate a stable mock ID based on the repo name
-    # This ensures the same repo name always gets the same ID during testing
-    import hashlib
-    mock_id = int(hashlib.md5(request.repoFullName.encode()).hexdigest(), 16) % 10000000
+    # Handle different repository name formats
+    if len(repo_parts) == 2:
+        # Format: username/repo-name
+        owner, repo_name = repo_parts
+    elif len(repo_parts) == 1 and request.repoFullName.endswith('.github.io'):
+        # Format: username.github.io (user/organization site)
+        owner = request.githubUsername
+        repo_name = request.repoFullName  # Full name is the repo name
+    else:
+        # Invalid format
+        return RepositoryValidationResponse(
+            repositoryId=0,
+            exists=False,
+            message=f"Invalid repository format: '{request.repoFullName}'. Expected 'username/repo-name' or 'username.github.io'."
+        )
     
-    return RepositoryValidationResponse(
-        repositoryId=mock_id,
-        exists=True,  # Always true in this mock version
-        message=f"Repository '{request.repoFullName}' validated successfully."
-    )
+    try:
+        # Use GitHubService to validate the repository
+        exists, repo_id, error_message = github_service.validate_repository(owner, repo_name)
+        
+        if exists and repo_id:
+            return RepositoryValidationResponse(
+                repositoryId=repo_id,
+                exists=True,
+                message=f"Repository '{request.repoFullName}' validated successfully."
+            )
+        else:
+            return RepositoryValidationResponse(
+                repositoryId=0,
+                exists=False,
+                message=error_message or f"Repository '{request.repoFullName}' not found or not accessible."
+            )
+    except GitHubRepoError as e:
+        logger.error(f"Error validating repository: {e}")
+        return RepositoryValidationResponse(
+            repositoryId=0,
+            exists=False,
+            message=f"Error validating repository: {str(e)}"
+        )
 
 
 def start():
