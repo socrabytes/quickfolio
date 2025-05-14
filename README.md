@@ -213,18 +213,27 @@ See existing themes for examples of implementation patterns.
 
 For developers, check our [GitHub Issues](https://github.com/socrabytes/quickfolio/issues) for current development status and planned tasks. We use a structured workflow with labeled issues to track progress on all features.
 
-### Setting Up GitHub OAuth
+### Setting Up GitHub App Integration
 
-To enable automatic deployment to GitHub Pages:
+Quickfolio now uses GitHub Apps (instead of OAuth) for deployment:
 
-1. Create a [GitHub OAuth application](https://github.com/settings/developers)
-2. Configure Quickfolio with your OAuth credentials in `.env`:
+1. Create a [GitHub App](https://github.com/settings/apps/new) with the following settings:
+   - **Homepage URL**: Your frontend URL (e.g., `https://quickfolio.onrender.com`)
+   - **Callback URL**: Your API endpoint (e.g., `https://quickfolio-api.onrender.com/github/app/callback`)
+   - **Repository permissions**: Contents (Read & write)
+   - **Request user authorization during installation**: Enabled
+
+2. Configure Quickfolio with your GitHub App credentials in `.env`:
    ```
-   GITHUB_CLIENT_ID=your_client_id_here
-   GITHUB_CLIENT_SECRET=your_client_secret_here
-   GITHUB_CALLBACK_URL=http://localhost:8000/github/callback
+   GITHUB_APP_ID=your_app_id_here
+   GITHUB_APP_CLIENT_ID=your_client_id_here
+   GITHUB_APP_CLIENT_SECRET=your_client_secret_here
+   GITHUB_APP_PRIVATE_KEY_PATH=path/to/private-key.pem
+   GITHUB_APP_INSTALLATION_CALLBACK_URL=your_api_url/github/app/callback
+   GITHUB_APP_NAME=Quickfolio
    ```
-3. Test your setup with `python scripts/test_github_oauth.py`
+
+> **Note**: We're currently redesigning our permission model to follow the principle of least privilege. See [PROJECT_STATUS.md](docs/PROJECT_STATUS.md) for details.
 
 For detailed instructions, see the [GitHub Deployment Guide](docs/features/github_deployment.md).
 
