@@ -118,6 +118,47 @@ const Create: NextPage = () => {
     }
 
     // Check if we need to set a specific step
+    const storedInstallationId = localStorage.getItem('github_installation_id');
+    if (storedInstallationId) {
+      console.log('Loaded installation ID from localStorage:', storedInstallationId);
+      setFormState(prev => ({ ...prev, installationId: parseInt(storedInstallationId, 10) }));
+    }
+
+    const storedRepoFullName = localStorage.getItem('selected_repo_full_name');
+    if (storedRepoFullName) {
+      console.log('Loaded selected_repo_full_name from localStorage:', storedRepoFullName);
+      setSelectedRepoFullName(storedRepoFullName);
+      const parts = storedRepoFullName.split('/');
+      let user = '';
+      let repo = '';
+      if (parts.length === 2) {
+        user = parts[0];
+        repo = parts[1];
+      } else if (storedRepoFullName.endsWith('.github.io')) {
+        user = storedRepoFullName.substring(0, storedRepoFullName.indexOf('.github.io'));
+        repo = storedRepoFullName; // The full name is the repo name in this case
+      }
+      if (user) {
+        setFormState(prev => ({ ...prev, userLogin: user, repoName: repo }));
+      }
+    }
+
+    const storedGithubRepoId = localStorage.getItem('github_repo_id');
+    if (storedGithubRepoId) {
+      console.log('Loaded github_repo_id from localStorage:', storedGithubRepoId);
+      setGithubRepoId(storedGithubRepoId);
+    }
+
+    // The redundant 'storedUserLogin' block has been removed.
+    // Its logic is covered by the 'storedUserLogin' declaration and handling
+    // earlier in this useEffect hook (around line 115).
+
+    const storedRepoName = localStorage.getItem('github_repo_name');
+    if (storedRepoName && !formState.repoName) { // Only if not already set by selected_repo_full_name logic
+        console.log('Loaded github_repo_name from localStorage (fallback):', storedRepoName);
+        setFormState(prev => ({...prev, repoName: storedRepoName}));
+    }
+
     if (query.step) {
       const step = query.step as CreationStep;
       if (['upload', 'customize', 'theme', 'preview', 'deploy'].includes(step)) {
@@ -137,10 +178,21 @@ const Create: NextPage = () => {
               }
             }
         }
-        // Pre-fill userLogin from localStorage if available (e.g., from a previous session)
-        const storedUserLogin = localStorage.getItem('github_user_login');
-        if (storedUserLogin) {
-          setFormState(prev => ({ ...prev, userLogin: storedUserLogin }));
+        // Ensure we also load selected repo details if on deploy step and they are missing
+        const deployStepRepoFullName = localStorage.getItem('selected_repo_full_name');
+        if (deployStepRepoFullName && !selectedRepoFullName) {
+          console.log('Loaded selected_repo_full_name for deploy step (fallback):', deployStepRepoFullName);
+          setSelectedRepoFullName(deployStepRepoFullName);
+          // Potentially re-parse userLogin/repoName if needed from deployStepRepoFullName here
+        }
+        const deployStepInstallationId = localStorage.getItem('github_installation_id');
+        if (deployStepInstallationId && !formState.installationId) {
+            console.log('Loaded installation ID for deploy step (fallback):', deployStepInstallationId);
+            setFormState(prev => ({ ...prev, installationId: parseInt(deployStepInstallationId, 10) }));
+        }
+        if (storedUserLogin) { // This is the original if condition from the user, which is now redundant due to the earlier load. Keep it for safety, or remove if confirmed redundant.
+          // This setFormState was for the original storedUserLogin, which is now deployStepUserLogin
+          // The logic is now handled by the 'if (deployStepUserLogin && !formState.userLogin)' block above.
         }
       }
     }
@@ -207,6 +259,7 @@ const Create: NextPage = () => {
   // Handler for when a repository is selected or its name is confirmed
   const handleRepoSelected = async (repoFullName: string) => {
     setSelectedRepoFullName(repoFullName);
+    localStorage.setItem('selected_repo_full_name', repoFullName);
     setRepoValidationError(null); // Clear previous errors
     setGithubRepoId(null); // Reset repo ID
     // Ensure the installation URL points back to the create page for callback handling
@@ -594,7 +647,17 @@ ${link.type ? `  type = "${link.type}"` : ''}
       return;
     }
     if (!formState.installationId) {
-      setDeploymentError('GitHub App not installed or installation ID missing. Please connect GitHub by clicking the button above.');
+      console.log('No GitHub App installation detected. Redirecting to GitHub for app installation...');
+      // Make sure we have a valid installation URL
+      if (!githubAppInstallUrl) {
+        // Fallback to a generic installation URL if specific one not set
+        const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://quickfolio.onrender.com';
+        const redirectUri = `${currentOrigin}/create`;
+        window.location.href = `https://github.com/apps/quickfolio/installations/new?redirect_uri=${encodeURIComponent(redirectUri)}`;
+      } else {
+        // Use the pre-configured installation URL (which may include repository_ids parameter)
+        window.location.href = githubAppInstallUrl;
+      }
       return;
     }
     if (!formState.userLogin.trim()) {
