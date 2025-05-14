@@ -410,18 +410,24 @@ async def github_callback(code: str, state: Optional[str] = None):
         
         # Redirect to frontend with data
         # Frontend URL hardcoded for simplicity - in production use an env var
-        frontend_url = "http://localhost:3000/deploy-callback"
+        # Get frontend URL from environment variable or fall back to production URL
+        frontend_base = os.environ.get("FRONTEND_URL", "https://quickfolio.onrender.com")
+        frontend_url = f"{frontend_base}/deploy-callback"
         query_params = "?" + "&".join([f"{k}={v}" for k, v in user_data.items() if v])
         redirect_url = frontend_url + query_params
         
         return RedirectResponse(url=redirect_url)
     except GitHubAuthError as e:
         # Redirect to frontend with error
-        error_url = f"http://localhost:3000/deploy-callback?error={str(e)}"
+        # Get frontend URL from environment variable or fall back to production URL
+        frontend_base = os.environ.get("FRONTEND_URL", "https://quickfolio.onrender.com")
+        error_url = f"{frontend_base}/deploy-callback?error={str(e)}"
         return RedirectResponse(url=error_url)
     except Exception as e:
         logger.error(f"Error in GitHub callback: {str(e)}", exc_info=True)
-        error_url = f"http://localhost:3000/deploy-callback?error=Server+error"
+        # Get frontend URL from environment variable or fall back to production URL
+        frontend_base = os.environ.get("FRONTEND_URL", "https://quickfolio.onrender.com")
+        error_url = f"{frontend_base}/deploy-callback?error=Server+error"
         return RedirectResponse(url=error_url)
 
 
@@ -445,7 +451,9 @@ async def github_app_install_redirect(request: Request):
         logger.error(f"Error generating GitHub App installation URL: {str(e)}", exc_info=True)
         # Redirect to a frontend page with an error message
         # Ensure your frontend can handle this query parameter for error display.
-        error_redirect_url = "http://localhost:3000/create?error=app_install_url_failed"
+        # Get frontend URL from environment variable or fall back to production URL
+        frontend_base = os.environ.get("FRONTEND_URL", "https://quickfolio.onrender.com")
+        error_redirect_url = f"{frontend_base}/create?error=app_install_url_failed"
         return RedirectResponse(url=error_redirect_url, status_code=302) # Use 302 for temporary redirect
 
 
@@ -475,7 +483,10 @@ async def github_app_callback(
     # if not github_service.validate_state(params.state, request.session.pop('github_oauth_state', None)):
     #     raise HTTPException(status_code=403, detail="Invalid OAuth state.")
 
-    frontend_target_url = "http://localhost:3000/create" # Target frontend page
+    # Get frontend URL from environment variable or fall back to production URL
+    frontend_url = os.environ.get("FRONTEND_URL", "https://quickfolio.onrender.com")
+    frontend_target_url = f"{frontend_url}/create" # Target frontend page
+    logger.info(f"Using frontend target URL: {frontend_target_url}")
 
     if params.installation_id:
         # Successfully received installation_id
