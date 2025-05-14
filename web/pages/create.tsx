@@ -1064,10 +1064,18 @@ ${link.type ? `  type = "${link.type}"` : ''}
                   <p className="text-gray-700 mb-1">
                     The Quickfolio GitHub App is installed (Installation ID: <strong className="text-indigo-600">{formState.installationId}</strong>).
                   </p>
-                  {selectedRepoFullName && (
+                  {selectedRepoFullName ? (
                      <p className="text-gray-700 mb-4">
                        Target repository: <strong className="text-indigo-600">{selectedRepoFullName}</strong>.
                      </p>
+                  ) : (
+                    <div className="mt-4">
+                      <p className="text-gray-600 mb-3">Please select a repository for deployment:</p>
+                      <RepoSelector 
+                        onRepoSelected={handleRepoSelected} 
+                        githubUsername={formState.userLogin} 
+                      />
+                    </div>
                   )}
                   {!selectedRepoFullName && formState.repoName && (
                      <p className="text-gray-700 mb-4">
