@@ -50,34 +50,38 @@ const Header = (): JSX.Element => {
         {/* Mobile Menu */}
         {isMenuOpen && (
           <nav className="md:hidden mt-4 pb-4 space-y-4">
-            <Link 
-              href="#features" 
-              className="block text-text hover:text-primary transition-colors"
-              onClick={() => setIsMenuOpen(false)}
-            >
-              Features
-            </Link>
-            <Link 
-              href="#how-it-works" 
-              className="block text-text hover:text-primary transition-colors"
-              onClick={() => setIsMenuOpen(false)}
-            >
-              How It Works
-            </Link>
-            <Link 
-              href="/create" 
-              className="block text-text hover:text-primary transition-colors font-medium"
-              onClick={() => setIsMenuOpen(false)}
-            >
-              Create Portfolio
-            </Link>
-            <Link 
-              href="#waitlist" 
-              className="block bg-primary hover:bg-secondary text-white px-4 py-2 rounded-md transition-colors w-full text-center"
-              onClick={() => setIsMenuOpen(false)}
-            >
-              Join Waitlist
-            </Link>
+            <div onClick={() => setIsMenuOpen(false)}>
+              <Link 
+                href="#features" 
+                className="block text-text hover:text-primary transition-colors"
+              >
+                Features
+              </Link>
+            </div>
+            <div onClick={() => setIsMenuOpen(false)}>
+              <Link 
+                href="#how-it-works" 
+                className="block text-text hover:text-primary transition-colors"
+              >
+                How It Works
+              </Link>
+            </div>
+            <div onClick={() => setIsMenuOpen(false)}>
+              <Link 
+                href="/create" 
+                className="block text-text hover:text-primary transition-colors font-medium"
+              >
+                Create Portfolio
+              </Link>
+            </div>
+            <div onClick={() => setIsMenuOpen(false)}>
+              <Link 
+                href="#waitlist" 
+                className="block bg-primary hover:bg-secondary text-white px-4 py-2 rounded-md transition-colors w-full text-center"
+              >
+                Join Waitlist
+              </Link>
+            </div>
           </nav>
         )}
       </div>
