@@ -639,7 +639,8 @@ ${link.type ? `  type = "${link.type}"` : ''}
     // This part needs careful coordination with backend logic for how content is placed in the repo.
 
     try {
-      const response = await fetch('/api/deploy', {
+      // Use the correct backend endpoint without /api prefix
+      const response = await fetch('/deploy', {
         method: 'POST',
         body: formData,
       });
