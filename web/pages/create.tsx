@@ -196,8 +196,10 @@ const Create: NextPage = () => {
     setSelectedRepoFullName(repoFullName);
     setRepoValidationError(null); // Clear previous errors
     setGithubRepoId(null); // Reset repo ID
-    // Reset to generic install URL until validation succeeds
-    setGithubAppInstallUrl('https://github.com/apps/quickfolio/installations/new');
+    // Ensure the installation URL points back to the create page for callback handling
+    const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://quickfolio.onrender.com';
+    const redirectUri = `${currentOrigin}/create`;
+    setGithubAppInstallUrl(`https://github.com/apps/quickfolio/installations/new?redirect_uri=${encodeURIComponent(redirectUri)}`);
 
     const parts = repoFullName.split('/');
     const actualRepoName = parts.length > 1 ? parts[1] : repoFullName;
@@ -232,10 +234,10 @@ const Create: NextPage = () => {
 
       const data = await response.json();
       if (data.repositoryId) {
-        setGithubRepoId(data.repositoryId.toString()); // Ensure it's a string if needed by URL
-        setGithubAppInstallUrl(
-          `https://github.com/apps/quickfolio/installations/new?repository_ids[]=${data.repositoryId}`
-        );
+        setGithubRepoId(data.repositoryId); 
+        const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://quickfolio.onrender.com';
+        const redirectUri = `${currentOrigin}/create`;
+        setGithubAppInstallUrl(`https://github.com/apps/quickfolio/installations/new?repository_ids[]=${data.repositoryId}&redirect_uri=${encodeURIComponent(redirectUri)}`);
         setRepoValidationError(null); // Clear any error
       } else {
         throw new Error('Repository ID not found in response.');
