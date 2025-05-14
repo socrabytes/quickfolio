@@ -5,6 +5,7 @@ import Head from 'next/head';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import ThemePicker from '../components/ThemePicker';
+import RepoSelector from '../components/RepoSelector'; // Added import
 import { getTheme, getThemes, getDefaultThemeId } from '../themes';
 import '../themes/lynx';
 import '../themes/nebula';
@@ -48,10 +49,9 @@ interface FormState {
   resumeText: string;
   tone: string;
   themeId: string;
-  // New state for GitHub App integration
   installationId: number | null;
-  userLogin: string;
-  repoName: string;
+  userLogin: string; // GitHub username
+  repoName: string; // This will now be set by RepoSelector
   portfolioDescription: string;
   isPrivateRepo: boolean;
 }
@@ -67,12 +67,23 @@ const Create: NextPage = () => {
     tone: 'professional',
     themeId: getDefaultThemeId(), // Use default theme from registry
     installationId: null,
-    userLogin: '',
+    userLogin: '', // User needs to input this or fetch from somewhere
     repoName: '',
     portfolioDescription: 'My Quickfolio-generated portfolio site',
     isPrivateRepo: false,
   });
-  
+
+  // New state for repository selection and GitHub App URL
+  const [selectedRepoFullName, setSelectedRepoFullName] = useState<string | null>(null);
+  const [githubRepoId, setGithubRepoId] = useState<string | null>(null); // Will be used later
+  const [githubAppInstallUrl, setGithubAppInstallUrl] = useState<string>(
+    'https://github.com/apps/quickfolio/installations/new'
+  ); // Default URL
+
+  // State for repository validation
+  const [isRepoValidating, setIsRepoValidating] = useState<boolean>(false);
+  const [repoValidationError, setRepoValidationError] = useState<string | null>(null);
+
   // Resume upload handling (file) - keep for now, but focus on text input for MVP
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -96,6 +107,12 @@ const Create: NextPage = () => {
     if (!router.isReady) return;
     
     const { query } = router;
+
+    // Attempt to get GitHub username from localStorage if not already set
+    const storedUserLogin = localStorage.getItem('github_user_login');
+    if (storedUserLogin && !formState.userLogin) {
+      setFormState(prev => ({ ...prev, userLogin: storedUserLogin }));
+    }
 
     // Check if we need to set a specific step
     if (query.step) {
@@ -159,17 +176,79 @@ const Create: NextPage = () => {
       }
     }
 
-  }, [router.isReady, router.query, mvpContent]); // Added mvpContent to deps
+  }, [router.isReady, router.query]); // Added formState.userLogin to dependencies if it's used to fetch
 
-  // Load installationId from localStorage on initial mount if not in query
+  // Effect to retrieve installation ID from localStorage on component mount
   useEffect(() => {
-    if (!formState.installationId) {
-      const storedInstallationId = localStorage.getItem('github_installation_id');
-      if (storedInstallationId) {
-        setFormState(prev => ({ ...prev, installationId: parseInt(storedInstallationId, 10) }));
-      }
+    const storedInstallationId = localStorage.getItem('github_installation_id');
+    if (storedInstallationId) {
+      setFormState(prev => ({ ...prev, installationId: parseInt(storedInstallationId, 10) }));
+    }
+    // Try to get userLogin from local storage if available
+    const ghUser = localStorage.getItem('github_user_login');
+    if (ghUser && !formState.userLogin) {
+      setFormState(prev => ({ ...prev, userLogin: ghUser }));
     }
   }, []); // Empty dependency array ensures this runs only on mount
+
+  // Handler for when a repository is selected or its name is confirmed
+  const handleRepoSelected = async (repoFullName: string) => {
+    setSelectedRepoFullName(repoFullName);
+    setRepoValidationError(null); // Clear previous errors
+    setGithubRepoId(null); // Reset repo ID
+    // Reset to generic install URL until validation succeeds
+    setGithubAppInstallUrl('https://github.com/apps/quickfolio/installations/new');
+
+    const parts = repoFullName.split('/');
+    const actualRepoName = parts.length > 1 ? parts[1] : repoFullName;
+    setFormState(prev => ({ ...prev, repoName: actualRepoName }));
+
+    if (formState.userLogin && repoFullName) {
+      await validateAndGetRepoId(repoFullName, formState.userLogin);
+    }
+  };
+
+  // Function to validate repository and get its ID
+  const validateAndGetRepoId = async (repoFullName: string, githubUsername: string) => {
+    setIsRepoValidating(true);
+    setRepoValidationError(null);
+    try {
+      // Construct the API URL using NEXT_PUBLIC_API_URL if available, otherwise assume relative path
+      const apiUrlBase = process.env.NEXT_PUBLIC_API_URL || '';
+      const response = await fetch(`${apiUrlBase}/api/github/validate-repository`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // Include Authorization header if your API requires it (e.g., JWT token)
+          // 'Authorization': `Bearer ${yourAuthToken}`,
+        },
+        body: JSON.stringify({ repoFullName, githubUsername }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Failed to validate repository. Please check the name and your permissions.' }));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      if (data.repositoryId) {
+        setGithubRepoId(data.repositoryId.toString()); // Ensure it's a string if needed by URL
+        setGithubAppInstallUrl(
+          `https://github.com/apps/quickfolio/installations/new?repository_ids[]=${data.repositoryId}`
+        );
+        setRepoValidationError(null); // Clear any error
+      } else {
+        throw new Error('Repository ID not found in response.');
+      }
+    } catch (error: any) {
+      console.error('Repository validation error:', error);
+      setRepoValidationError(error.message || 'An unexpected error occurred during repository validation.');
+      // Optionally, reset to generic install URL or keep it, based on desired UX
+      setGithubAppInstallUrl('https://github.com/apps/quickfolio/installations/new');
+      setGithubRepoId(null);
+    }
+    setIsRepoValidating(false);
+  };
 
   // Theme selection handler
   const handleThemeSelect = (themeId: string) => {
@@ -729,7 +808,7 @@ ${link.type ? `  type = "${link.type}"` : ''}
               <button
                 type="button"
                 onClick={handleProceedToPreview}
-                className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
+                className="px-8 py-3 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
               >
                 Continue to Preview
               </button>
@@ -785,7 +864,7 @@ ${link.type ? `  type = "${link.type}"` : ''}
                   </div>
                 </div>
 
-                <div className="flex justify-between pt-6 mt-6 border-t">
+                <div className="flex justify-between pt-6 mt-6 border-t border-gray-200">
                   <button 
                     onClick={() => setCurrentStep('theme')} 
                     className="text-gray-600 hover:text-gray-800 transition-colors"
@@ -838,71 +917,74 @@ ${link.type ? `  type = "${link.type}"` : ''}
             {/* GitHub App Installation status and Deployment Form */}
             {!formState.installationId ? (
               <div className="text-center py-6">
-                <p className="text-gray-600 mb-6">
+                <p className="text-gray-600 mb-4">
                   Install the Quickfolio GitHub App to deploy your new portfolio site.
                 </p>
-                <a
-                  href="https://github.com/apps/quickfolio/installations/new"
-                  className="inline-flex items-center justify-center px-6 py-3 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition-colors font-semibold shadow-md"
-                >
-                  <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fillRule="evenodd" d="M10 0C4.477 0 0 4.477 0 10c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.483 0-.237-.009-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-.916-1.466-.916-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.031-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0110 4.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.378.201 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.338 4.695-4.566 4.942.359.308.678.92.678 1.852 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.001 10.001 0 0020 10c0-5.523-4.477-10-10-10z" clipRule="evenodd"></path></svg>
-                  Install Quickfolio GitHub App
-                </a>
-                {formState.userLogin && (
-                  <p className="mt-4 text-sm text-green-600">
-                    GitHub App installed for user {formState.userLogin}.
+                <RepoSelector 
+                  onRepoSelected={handleRepoSelected} 
+                  githubUsername={formState.userLogin} 
+                />
+                {selectedRepoFullName && (
+                  <div className="mt-6 text-center">
+                    <p className="text-gray-600 mb-3">
+                      You've selected: <strong className="text-indigo-600">{selectedRepoFullName}</strong>.
+                      Now, install the Quickfolio GitHub App for this repository.
+                    </p>
+                    <a
+                      href={githubAppInstallUrl} // Updated href
+                      target="_blank" // Open in new tab for GitHub flow
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center px-6 py-3 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition-colors font-semibold shadow-md"
+                    >
+                      <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fillRule="evenodd" d="M10 0C4.477 0 0 4.477 0 10c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.483 0-.237-.009-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-.916-1.466-.916-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.031-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0110 4.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.378.201 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.338 4.695-4.566 4.942.359.308.678.92.678 1.852 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.001 10.001 0 0020 10c0-5.523-4.477-10-10-10z" clipRule="evenodd"></path></svg>
+                      Install Quickfolio GitHub App for {selectedRepoFullName}
+                    </a>
+                  </div>
+                )}
+                {!selectedRepoFullName && formState.userLogin && (
+                  <p className="mt-6 text-center text-gray-500">
+                    Please select or create a repository above to proceed with the app installation.
                   </p>
                 )}
+
               </div>
             ) : (
               <div>
                 {/* Deployment form when app is installed */} 
                 <div className="mb-6">
-                  <p className="text-gray-600 mb-4">
-                    The Quickfolio GitHub App is installed (ID: {formState.installationId}). Fill in the details to deploy.
+                  <p className="text-gray-700 mb-1">
+                    The Quickfolio GitHub App is installed (Installation ID: <strong className="text-indigo-600">{formState.installationId}</strong>).
+                  </p>
+                  {selectedRepoFullName && (
+                     <p className="text-gray-700 mb-4">
+                       Target repository: <strong className="text-indigo-600">{selectedRepoFullName}</strong>.
+                     </p>
+                  )}
+                  {!selectedRepoFullName && formState.repoName && (
+                     <p className="text-gray-700 mb-4">
+                       Target repository from previous session: <strong className="text-indigo-600">{formState.userLogin}/{formState.repoName}</strong>. Consider re-selecting if this is not intended.
+                     </p>
+                  )}
+                  <p className="text-gray-700 mb-4">
+                    Fill in the details below to deploy your portfolio.
                   </p>
                   
-                  {/* GitHub Username input */}
-                  <div className="mb-4">
-                    <label htmlFor="userLogin" className="block text-sm font-medium text-gray-700 mb-1">
-                      Your GitHub Username <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      id="userLogin"
-                      name="userLogin"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary shadow-sm"
-                      placeholder="YourGitHubUsername"
-                      value={formState.userLogin}
-                      onChange={handleInputChange}
-                      required
-                    />
-                     <p className="text-xs text-gray-500 mt-1">
-                      The GitHub username where the app was installed.
-                    </p>
-                  </div>
+                  {/* GitHub Username (display or confirm, as it's part of selectedRepoFullName) */}
+                  {/* We might not need a separate input for repoName if selectedRepoFullName is canonical */}
+                  {/* For now, keeping the structure, but repoName in formState should be derived from selectedRepoFullName */}
 
-                  {/* Repository name input */}
-                  <div className="mb-4">
-                    <label htmlFor="repoName" className="block text-sm font-medium text-gray-700 mb-1">
-                      New Repository Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      id="repoName"
-                      name="repoName"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary shadow-sm"
-                      placeholder="my-awesome-portfolio"
-                      value={formState.repoName}
-                      onChange={handleInputChange}
-                      required
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      A new repository will be created with this name.
-                    </p>
-                  </div>
-
-                  {/* Portfolio description input */}
+                  {/* Conditionally show RepoSelector if no repo selected yet OR to allow change */} 
+                  {(!selectedRepoFullName && formState.userLogin) && (
+                    <div className="mb-6">
+                       <p className="text-sm text-gray-600 mb-2">It seems a repository was not selected in this session. Please select one:</p>
+                       <RepoSelector 
+                        onRepoSelected={handleRepoSelected} 
+                        githubUsername={formState.userLogin} 
+                      />
+                    </div>
+                  )}
+                  
+                  {/* Portfolio description input - this is fine */}
                   <div className="mb-4">
                     <label htmlFor="portfolioDescription" className="block text-sm font-medium text-gray-700 mb-1">
                       Portfolio Description
@@ -938,12 +1020,12 @@ ${link.type ? `  type = "${link.type}"` : ''}
                   {/* Deploy button */} 
                   <button
                     onClick={handleDeploy}
-                    disabled={isDeploying || !formState.userLogin || !formState.repoName}
+                    disabled={isDeploying || !formState.userLogin || !selectedRepoFullName || !formState.installationId}
                     className="w-full px-6 py-3 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors font-semibold shadow-md disabled:opacity-50 flex items-center justify-center"
                   >
                     {isDeploying ? (
                       <>
-                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
