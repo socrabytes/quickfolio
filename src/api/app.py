@@ -52,6 +52,14 @@ app = FastAPI(
     version="0.1.0",
 )
 
+# Initialize services
+content_generator = ContentGenerator()
+github_service = GitHubService()
+
+# Set up logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+
 # Add CORS middleware with proper configuration
 # Get frontend URL from environment or use default
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'https://quickfolio.onrender.com')
@@ -74,14 +82,6 @@ app.add_middleware(
     expose_headers=["Content-Disposition"],
     max_age=600,  # Cache preflight requests for 10 minutes
 )
-
-# Initialize services
-content_generator = ContentGenerator()
-github_service = GitHubService()
-
-# Set up logging
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
 
 # Get API key from config which loads from .env
 from src.config import GEMINI_API_KEY, GEMINI_MODEL
