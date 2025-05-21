@@ -277,9 +277,9 @@ Ensure your entire output is a single, valid JSON object, starting with {{ and e
     model_name = os.getenv("GEMINI_MODEL", "models/gemini-1.5-flash-latest")
     generation_config = genai.types.GenerationConfig(
         candidate_count=1,
-        temperature=0.1, # Lower temperature for more deterministic, structured output
-        response_mime_type="application/json" # Request JSON output directly
+        temperature=0.1  # Lower temperature for more deterministic, structured output
     )
+    generation_config.response_mime_type = "application/json" # Request JSON output directly
     safety_settings = [
         {
             "category": "HARM_CATEGORY_HARASSMENT",
