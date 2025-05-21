@@ -220,19 +220,46 @@ const Create: NextPage = () => {
         // Set installation success flag to show user a message
         setGithubInstallSuccess(true);
         
-        // Debug current state after installation
-        console.log('Current form state:', formState);
-        console.log('Current step:', currentStep);
-        console.log('Selected repo:', selectedRepoFullName);
-        console.log('GitHub repo ID:', githubRepoId);
-        // If successfully installed, move to deploy step automatically if content is ready
-        if (mvpContent || localStorage.getItem('mvp_content')) {
-          setCurrentStep('deploy');
-        } else {
-          // If no content, maybe go to customize or stay to allow user to generate content
-          // For now, let's assume content should be generated first
-          // setCurrentStep('customize'); 
+        // Critical: ALWAYS force the step to 'deploy' after GitHub redirect
+        setCurrentStep('deploy');
+        
+        // Attempt to restore the previous repository selection
+        const storedRepoName = localStorage.getItem('selected_repo_full_name');
+        if (storedRepoName && !selectedRepoFullName) {
+          console.log(`Restoring repository selection: ${storedRepoName}`);
+          setSelectedRepoFullName(storedRepoName);
+          
+          // Parse user/repo from the full name
+          if (storedRepoName.includes('/')) {
+            const [user, repo] = storedRepoName.split('/');
+            setFormState(prev => ({ ...prev, userLogin: user, repoName: repo }));
+          } else if (storedRepoName.startsWith('/')) {
+            // Handle cases with leading slash
+            const repoWithoutSlash = storedRepoName.substring(1);
+            setFormState(prev => ({ ...prev, repoName: repoWithoutSlash }));
+          }
         }
+        
+        // Restore content if available
+        const savedContent = localStorage.getItem('mvp_content');
+        if (!mvpContent && savedContent) {
+          try {
+            console.log('Restoring content from localStorage after GitHub redirect');
+            const parsedContent = JSON.parse(savedContent) as MVPContentData;
+            setMvpContent(parsedContent);
+          } catch (e) {
+            console.error('Failed to parse content from localStorage:', e);
+          }
+        }
+        
+        // Debug current state after installation
+        console.log('Current form state after GitHub callback:', {
+          installationId: instId,
+          step: 'deploy', // We're forcing this now
+          selectedRepo: storedRepoName || selectedRepoFullName,
+          contentRestored: !!savedContent
+        });
+        
         // Clean up URL query parameters after processing
         const { pathname, query: currentQuery } = router;
         delete currentQuery.installation_id;
