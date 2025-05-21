@@ -686,6 +686,42 @@ ${link.type ? `  type = "${link.type}"` : ''}
   };
   
   /**
+   * Attempt to extract GitHub username from repository info if missing
+   */
+  const ensureGitHubUsername = (): boolean => {
+    // If username already set, we're good
+    if (formState.userLogin && formState.userLogin.trim()) {
+      return true;
+    }
+    
+    // Try to extract from selectedRepoFullName
+    if (selectedRepoFullName) {
+      console.log('Attempting to extract GitHub username from repo:', selectedRepoFullName);
+      let extractedUsername = '';
+      
+      if (selectedRepoFullName.includes('/')) {
+        // Format: owner/repo
+        const parts = selectedRepoFullName.split('/');
+        if (parts.length >= 2 && parts[0]) {
+          extractedUsername = parts[0];
+        }
+      } else if (selectedRepoFullName.endsWith('.github.io')) {
+        // Format: username.github.io
+        extractedUsername = selectedRepoFullName.replace('.github.io', '');
+      }
+      
+      if (extractedUsername) {
+        console.log('Successfully extracted GitHub username:', extractedUsername);
+        setFormState(prev => ({ ...prev, userLogin: extractedUsername }));
+        localStorage.setItem('github_user_login', extractedUsername);
+        return true;
+      }
+    }
+    
+    return false;
+  };
+
+  /**
    * Handle deployment to GitHub Pages
    * Uses the GitHub App installation and a pre-selected repository
    * to deploy the generated portfolio with least-privilege permissions
@@ -693,6 +729,13 @@ ${link.type ? `  type = "${link.type}"` : ''}
   const handleDeploy = async (): Promise<void> => {
     if (!mvpContent) {
       setDeploymentError('No content generated to deploy.');
+      return;
+    }
+    
+    // Always try to ensure username is set before proceeding
+    const hasUsername = ensureGitHubUsername();
+    if (!hasUsername) {
+      setDeploymentError('GitHub Username is required.');
       return;
     }
     if (!formState.installationId) {
@@ -728,12 +771,12 @@ ${link.type ? `  type = "${link.type}"` : ''}
 
     // Parse repository information from selectedRepoFullName
     // Handle various formats: user/repo, repo, /repo
-    let owner = formState.userLogin;
+    let owner = formState.userLogin || '';
     let repo = '';
     
     if (selectedRepoFullName) {
       if (selectedRepoFullName.includes('/')) {
-        // Format: user/repo or /repo
+        // Format: user/repo
         const parts = selectedRepoFullName.split('/');
         if (parts.length === 2) {
           // Normal case: user/repo
@@ -750,16 +793,17 @@ ${link.type ? `  type = "${link.type}"` : ''}
     
     console.log('Parsed repository information:', { owner, repo });
 
+    // Create FormData with guaranteed string values to fix TypeScript errors
     const formData = new FormData();
-    formData.append('installation_id', formState.installationId.toString());
-    formData.append('user_login', owner); // Use the owner from selectedRepoFullName if available
-    formData.append('repo_name', repo); // Use the repo from selectedRepoFullName if available
-    formData.append('full_repo_name', selectedRepoFullName); // Add the full repo name for clarity
-    formData.append('repository_id', githubRepoId || ''); // Add repository ID if available
-    formData.append('generated_content', JSON.stringify(mvpContent));
-    formData.append('theme', formState.themeId);
-    formData.append('portfolio_description', formState.portfolioDescription);
-    formData.append('private_repo', formState.isPrivateRepo.toString());
+    formData.append('installation_id', formState.installationId?.toString() || '0');
+    formData.append('user_login', owner || ''); // Ensure non-undefined string
+    formData.append('repo_name', repo || ''); // Ensure non-undefined string
+    formData.append('full_repo_name', selectedRepoFullName || ''); // Ensure non-undefined string
+    formData.append('repository_id', githubRepoId || ''); // Ensure non-undefined string
+    formData.append('generated_content', JSON.stringify(mvpContent || {})); // Ensure valid JSON
+    formData.append('theme', formState.themeId || 'lynx'); // Default to 'lynx' if undefined
+    formData.append('portfolio_description', formState.portfolioDescription || 'My Quickfolio portfolio'); // Default description
+    formData.append('private_repo', (formState.isPrivateRepo || false).toString()); // Default to public
   
     // Add detailed logging to debug deployment issues
     console.log('Deployment params being sent to backend:', {
@@ -1099,6 +1143,18 @@ ${link.type ? `  type = "${link.type}"` : ''}
         {currentStep === 'deploy' && (
           <div className="bg-white p-8 rounded-lg shadow-md">
             <h2 className="text-2xl font-semibold mb-6">Deploy Your Portfolio</h2>
+            
+            {/* Debug info for troubleshooting */}
+            <div className="hidden">
+              <pre className="text-xs text-gray-500 mb-4">
+                {JSON.stringify({
+                  installationId: formState.installationId,
+                  userLogin: formState.userLogin, 
+                  repoName: formState.repoName,
+                  selectedRepo: selectedRepoFullName
+                }, null, 2)}
+              </pre>
+            </div>
             
             {/* Show GitHub App installation success message */}
             {githubInstallSuccess && (
