@@ -52,13 +52,27 @@ app = FastAPI(
     version="0.1.0",
 )
 
-# Add CORS middleware
+# Add CORS middleware with proper configuration
+# Get frontend URL from environment or use default
+FRONTEND_URL = os.environ.get('FRONTEND_URL', 'https://quickfolio.onrender.com')
+allowed_origins = [
+    FRONTEND_URL,
+    'https://quickfolio.onrender.com',
+    'http://localhost:3000',  # For local development
+    'http://127.0.0.1:3000',  # For local development
+    'http://localhost:10000',  # For local production build
+]
+
+logger.info(f"Configuring CORS with allowed origins: {allowed_origins}")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # For development; restrict in production
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "Accept"],
+    expose_headers=["Content-Disposition"],
+    max_age=600,  # Cache preflight requests for 10 minutes
 )
 
 # Initialize services
