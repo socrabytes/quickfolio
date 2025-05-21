@@ -1075,6 +1075,39 @@ ${link.type ? `  type = "${link.type}"` : ''}
               </div>
             ) : (
               <div>
+                {/* Add choice for users to continue with existing data or start fresh */}
+                <div className="bg-blue-50 border border-blue-200 rounded-md p-4 mb-6">
+                  <h3 className="text-lg font-medium text-blue-800 mb-2">Previous installation detected</h3>
+                  <p className="text-blue-700 mb-3">
+                    We found a previous GitHub App installation (ID: <strong>{formState.installationId}</strong>)
+                    {selectedRepoFullName && <span> for repository: <strong>{selectedRepoFullName}</strong></span>}.
+                  </p>
+                  <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
+                    <button 
+                      className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                      onClick={() => {
+                        // Continue with existing data - do nothing
+                      }}
+                    >
+                      Continue with this setup
+                    </button>
+                    <button
+                      className="px-4 py-2 bg-gray-100 text-gray-800 border border-gray-300 rounded hover:bg-gray-200 transition-colors"
+                      onClick={() => {
+                        // Clear all GitHub-related data
+                        setFormState(prev => ({ ...prev, installationId: null }));
+                        setSelectedRepoFullName(null);
+                        setGithubRepoId(null);
+                        localStorage.removeItem('github_installation_id');
+                        localStorage.removeItem('selected_repo_full_name');
+                        localStorage.removeItem('github_repo_id');
+                      }}
+                    >
+                      Start fresh with new repository
+                    </button>
+                  </div>
+                </div>
+
                 {/* Deployment form when app is installed */} 
                 <div className="mb-6">
                   <p className="text-gray-700 mb-1">
