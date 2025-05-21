@@ -727,9 +727,28 @@ ${link.type ? `  type = "${link.type}"` : ''}
     setDeploymentSuccess(null);
 
     // Parse repository information from selectedRepoFullName
-    const [owner, repo] = selectedRepoFullName.includes('/') 
-      ? selectedRepoFullName.split('/') 
-      : [formState.userLogin, selectedRepoFullName]; // For username.github.io case
+    // Handle various formats: user/repo, repo, /repo
+    let owner = formState.userLogin;
+    let repo = '';
+    
+    if (selectedRepoFullName) {
+      if (selectedRepoFullName.includes('/')) {
+        // Format: user/repo or /repo
+        const parts = selectedRepoFullName.split('/');
+        if (parts.length === 2) {
+          // Normal case: user/repo
+          [owner, repo] = parts;
+        } else if (parts.length === 1) {
+          // Leading slash: /repo
+          repo = parts[0];
+        }
+      } else {
+        // No slash, just repo name
+        repo = selectedRepoFullName;
+      }
+    }
+    
+    console.log('Parsed repository information:', { owner, repo });
 
     const formData = new FormData();
     formData.append('installation_id', formState.installationId.toString());
@@ -760,9 +779,13 @@ ${link.type ? `  type = "${link.type}"` : ''}
     // This part needs careful coordination with backend logic for how content is placed in the repo.
 
     try {
+      // Construct the API URL using environment variable if available
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || '';
+      console.log(`Using API URL base: ${apiBaseUrl || 'relative path'} for deployment`);
       console.log('Starting deployment process, sending data to /deploy endpoint...');
-      // Use the correct backend endpoint without /api prefix
-      const response = await fetch('/deploy', {
+      
+      // Use the environment variable for API base URL
+      const response = await fetch(`${apiBaseUrl}/deploy`, {
         method: 'POST',
         body: formData,
       });
@@ -784,7 +807,14 @@ ${link.type ? `  type = "${link.type}"` : ''}
       }
 
       if (!response.ok) {
-        throw new Error(result.detail || `Deployment failed: ${response.statusText}. See console for details.`);
+        // Provide more detailed error information from the backend
+        const errorDetail = result.detail || result.error || result.message || response.statusText;
+        console.error('Deployment API error:', {
+          status: response.status,
+          error: errorDetail,
+          result
+        });
+        throw new Error(`Deployment failed: ${errorDetail}. See console for details.`);
       }
 
       setDeploymentSuccess(`Successfully deployed to ${result.deployment_url}!\nRepository: ${result.repository_url}`);
