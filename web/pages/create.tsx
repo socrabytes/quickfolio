@@ -708,39 +708,72 @@ ${link.type ? `  type = "${link.type}"` : ''}
     formData.append('theme', formState.themeId);
     formData.append('portfolio_description', formState.portfolioDescription);
     formData.append('private_repo', formState.isPrivateRepo.toString());
-
-    // The theme's static files (like images, default _index.md if needed)
-    // might need to be handled differently. For now, backend uses template_path from themeId.
-    // The `github_service.create_pages_repository` is expected to copy files from `TEMPLATES_DIR / themeId`
-    // And then `update_repository_content` would be used if we wanted to push AI-generated markdown/HTML files.
+  
+    // Add detailed logging to debug deployment issues
+    console.log('Deployment params being sent to backend:', {
+      installation_id: formState.installationId,
+      user_login: owner,
+      repo_name: repo,
+      full_repo_name: selectedRepoFullName,
+      repository_id: githubRepoId,
+      theme: formState.themeId,
+      portfolio_description: formState.portfolioDescription,
+      private_repo: formState.isPrivateRepo,
+      // Don't log the entire content for brevity
+      content_size: JSON.stringify(mvpContent).length
+    });
     // For the current Python `create_pages_repository`, it pushes the whole `template_path`.
     // We need to ensure that `generated_content` is used by the backend to *create* files within that structure.
     // This part needs careful coordination with backend logic for how content is placed in the repo.
 
     try {
+      console.log('Starting deployment process, sending data to /deploy endpoint...');
       // Use the correct backend endpoint without /api prefix
       const response = await fetch('/deploy', {
         method: 'POST',
         body: formData,
       });
 
-      const result = await response.json();
+      console.log('Received response from /deploy endpoint:', {
+        status: response.status,
+        statusText: response.statusText,
+      });
+
+      let result;
+      try {
+        result = await response.json();
+        console.log('Response body from /deploy endpoint:', result);
+      } catch (jsonError: any) {
+        console.error('Failed to parse response as JSON:', jsonError);
+        const textResponse = await response.text();
+        console.error('Raw response body:', textResponse);
+        throw new Error(`Failed to parse API response: ${jsonError.message}. Raw response: ${textResponse.substring(0, 100)}...`);
+      }
 
       if (!response.ok) {
-        throw new Error(result.detail || `Deployment failed: ${response.statusText}`);
+        throw new Error(result.detail || `Deployment failed: ${response.statusText}. See console for details.`);
       }
 
       setDeploymentSuccess(`Successfully deployed to ${result.deployment_url}!\nRepository: ${result.repository_url}`);
       console.log('Deployment successful:', result);
+      
+      // Provide a direct link to the deployed site
+      const deployedUrl = result.deployment_url;
+      const repoUrl = result.repository_url;
+      
       // Optionally, clear localStorage or redirect to a success page
       // localStorage.removeItem('mvp_content');
       // localStorage.removeItem('github_installation_id'); // User might want to deploy another repo
       // router.push(`/success?url=${result.deployment_url}`);
 
     } catch (error: any) {
-      console.error('Deployment error:', error);
-      setDeploymentError(error.message || 'An unknown error occurred during deployment.');
-    }
+      console.error('Deployment error details:', error);
+      if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+        setDeploymentError('Network error connecting to the backend server. Please check your connection and try again.');
+      } else {
+        setDeploymentError(error.message || 'An unknown error occurred during deployment. Check console for details.');
+      }
+    }  
     setIsDeploying(false);
   };
 
