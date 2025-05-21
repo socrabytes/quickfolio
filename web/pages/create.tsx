@@ -511,7 +511,10 @@ ${link.type ? `  type = "${link.type}"` : ''}
           formData.append('file', formState.resumeFile);
           
           // Try to call the API endpoint that handles PDF processing
-          const uploadResponse = await fetch('http://localhost:8888/upload-resume', {
+          // Use environment variable for API URL
+          const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || '';
+          console.log(`Using API base URL: ${apiBaseUrl || 'relative path'} for resume upload`);
+          const uploadResponse = await fetch(`${apiBaseUrl}/upload-resume`, {
             method: 'POST',
             body: formData,
           });
@@ -565,8 +568,11 @@ ${link.type ? `  type = "${link.type}"` : ''}
     }
 
     try {
-      // Try to use the actual backend API
-      const response = await fetch('http://localhost:8888/generate-mvp-content', {
+      // Construct the API URL using environment variable if available
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || '';
+      console.log(`Using API base URL: ${apiBaseUrl || 'relative path'} for content generation`);
+      
+      const response = await fetch(`${apiBaseUrl}/generate-mvp-content`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
