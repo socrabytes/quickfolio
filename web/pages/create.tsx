@@ -1151,8 +1151,10 @@ ${link.type ? `  type = "${link.type}"` : ''}
                   <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
                     <button 
                       className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-                      onClick={() => {
-                        // Continue with existing data - do nothing
+                      onClick={async () => {
+                        // Continue with existing installation and deploy
+                        console.log('Continuing with existing GitHub App installation...');
+                        await handleDeploy();
                       }}
                     >
                       Continue with this setup
