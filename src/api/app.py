@@ -343,7 +343,15 @@ Ensure your entire output is a single, valid JSON object, starting with {{ and e
             return data
         
         try:
-            parsed_json = json.loads(raw_ai_response)
+            # Clean up the response by removing markdown code blocks if present
+            clean_response = raw_ai_response.strip()
+            if clean_response.startswith('```json'):
+                # Remove the opening ```json and closing ```
+                clean_response = clean_response[7:]  # Remove '```json'
+                clean_response = clean_response.rstrip('`').strip()
+            
+            # Parse the cleaned JSON
+            parsed_json = json.loads(clean_response)
             # Normalize URLs before validation
             normalized_json = normalize_urls(parsed_json)
             
