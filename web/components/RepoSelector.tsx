@@ -2,10 +2,15 @@ import React, { useState, ChangeEvent, FormEvent } from 'react';
 
 interface RepoSelectorProps {
   onRepoSelected: (repoName: string) => void;
-  githubUsername: string; // To prefill or suggest repo names
+  githubUsername?: string; // To prefill or suggest repo names
+  installationId?: number | null; // GitHub App installation ID
 }
 
-const RepoSelector: React.FC<RepoSelectorProps> = ({ onRepoSelected, githubUsername }) => {
+const RepoSelector: React.FC<RepoSelectorProps> = ({ 
+  onRepoSelected, 
+  githubUsername = '',
+  installationId = null
+}) => {
   const [repoName, setRepoName] = useState<string>('');
   const [repoType, setRepoType] = useState<'userPage' | 'projectPage'>('projectPage');
 
