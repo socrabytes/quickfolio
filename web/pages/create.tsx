@@ -517,6 +517,12 @@ ${link.type ? `  type = "${link.type}"` : ''}
           const uploadResponse = await fetch(`${apiBaseUrl}/upload-resume`, {
             method: 'POST',
             body: formData,
+            credentials: 'include',  // Include credentials (cookies, HTTP authentication)
+            headers: {
+              // Don't set Content-Type manually when using FormData
+              // The browser will set it automatically with the correct boundary
+            },
+            mode: 'cors',  // Enable CORS mode
           });
           
           if (!uploadResponse.ok) {
@@ -584,8 +590,13 @@ ${link.type ? `  type = "${link.type}"` : ''}
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
         },
-        body: JSON.stringify({ resume_text: resumeText }),
+        credentials: 'include',  // Include credentials (cookies, HTTP authentication)
+        mode: 'cors',  // Enable CORS mode
+        body: JSON.stringify({
+          resume_text: resumeText,
+        }),
       });
 
       // Check if the API response was successful

@@ -69,19 +69,33 @@ allowed_origins = [
     'http://localhost:3000',  # For local development
     'http://127.0.0.1:3000',  # For local development
     'http://localhost:10000',  # For local production build
+    'http://127.0.0.1:10000',  # For local production build
 ]
 
 logger.info(f"Configuring CORS with allowed origins: {allowed_origins}")
 
+# Add CORS middleware with more permissive settings for development
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "Accept"],
-    expose_headers=["Content-Disposition"],
-    max_age=600,  # Cache preflight requests for 10 minutes
+    allow_methods=["*"],  # Allow all methods for now
+    allow_headers=["*"],  # Allow all headers for now
+    expose_headers=["*"],  # Expose all headers
+    max_age=86400,  # Cache preflight requests for 24 hours
 )
+
+# Add middleware to add CORS headers to all responses
+@app.middleware("http")
+async def add_cors_header(request: Request, call_next):
+    response = await call_next(request)
+    origin = request.headers.get('origin')
+    if origin in allowed_origins:
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept, X-Requested-With, Origin, X-CSRF-Token'
+    return response
 
 # Get API key from config which loads from .env
 from src.config import GEMINI_API_KEY, GEMINI_MODEL
