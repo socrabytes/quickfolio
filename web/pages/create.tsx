@@ -1,19 +1,45 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import { NextPage } from 'next';
 import Head from 'next/head';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import ThemePicker from '../components/ThemePicker';
-import RepoSelector from '../components/RepoSelector'; // Added import
+import RepoSelector from '../components/RepoSelector';
 import { getTheme, getThemes, getDefaultThemeId } from '../themes';
 import '../themes/lynx';
 import '../themes/nebula';
+import type { MVPContentData } from '../types/mvp';
 
-// Define step types for the portfolio creation wizard
-type CreationStep = 'upload' | 'customize' | 'theme' | 'preview' | 'deploy';
+// Ensure we have a type for the window object with our custom properties
+declare global {
+  interface Window {
+    gtag: any;
+    dataLayer: any[];
+  }
+}
 
-// --- New TypeScript Interfaces for MVP Content ---
+// Define the form state type
+interface FormState {
+  resumeFile: File | null;
+  resumeText: string;
+  tone: string;
+  themeId: string;
+  installationId: number | null;
+  userLogin: string;
+  repoName: string;
+  portfolioDescription: string;
+  isPrivateRepo: boolean;
+}
+
+type CreationStep = 'upload' | 'theme' | 'deploy' | 'preview';
+
+interface MVPContentGenerationResponse {
+  mvp_content?: MVPContentData;
+  raw_ai_response?: string;
+}
+
+// --- TypeScript Interfaces for MVP Content ---
 interface ProfileData {
   name: string;
   headline: string;
@@ -27,36 +53,28 @@ interface LinkData {
   type?: string;
 }
 
-interface MVPContentData {
-  profile: ProfileData;
-  links: LinkData[];
+// MVPContentData is already imported from types/mvp
+
+interface CreateProps {
+  // Component props if any
 }
 
-interface MVPContentGenerationResponse {
-  mvp_content?: MVPContentData;
-  raw_ai_response?: string;
-  error?: string;
-  debug_info?: {
-    prompt_length?: number;
-    model_used?: string;
-    parsed_json_failing_validation?: any;
-  };
-}
-
-// Interface for form state
 interface FormState {
   resumeFile: File | null;
   resumeText: string;
   tone: string;
   themeId: string;
   installationId: number | null;
-  userLogin: string; // GitHub username
-  repoName: string; // This will now be set by RepoSelector
+  userLogin: string;
+  repoName: string;
   portfolioDescription: string;
   isPrivateRepo: boolean;
 }
 
-const Create: NextPage = () => {
+const Create: NextPage<CreateProps> = () => {
+  // Router initialization
+  const router = useRouter();
+  
   // Current step in the wizard
   const [currentStep, setCurrentStep] = useState<CreationStep>('upload');
   
@@ -65,165 +83,226 @@ const Create: NextPage = () => {
     resumeFile: null,
     resumeText: '',
     tone: 'professional',
-    themeId: getDefaultThemeId(), // Use default theme from registry
+    themeId: getDefaultThemeId(),
     installationId: null,
-    userLogin: '', // User needs to input this or fetch from somewhere
+    userLogin: '',
     repoName: '',
     portfolioDescription: 'My Quickfolio-generated portfolio site',
     isPrivateRepo: false,
   });
-
-  // New state for repository selection and GitHub App URL
+  
+  // GitHub related state
   const [selectedRepoFullName, setSelectedRepoFullName] = useState<string | null>(null);
-  const [githubRepoId, setGithubRepoId] = useState<string | null>(null); // Will be used later
+  const [githubRepoId, setGithubRepoId] = useState<string | null>(null);
   const [githubAppInstallUrl, setGithubAppInstallUrl] = useState<string>(
-    'https://github.com/apps/quickfolio/installations/new'
-  ); // Default URL - Using 'quickfolio' as the app slug
-
-  // State for repository validation
+    process.env.NEXT_PUBLIC_GITHUB_APP_INSTALL_URL || 'https://github.com/apps/quickfolio/installations/new'
+  );
+  
+  // UI state
   const [isRepoValidating, setIsRepoValidating] = useState<boolean>(false);
   const [repoValidationError, setRepoValidationError] = useState<string | null>(null);
-
-  // State to track GitHub app installation success message
   const [githubInstallSuccess, setGithubInstallSuccess] = useState<boolean>(false);
-
-  // Resume upload handling (file) - keep for now, but focus on text input for MVP
-  const [isUploading, setIsUploading] = useState(false);
+  const [isUploading, setIsUploading] = useState<boolean>(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
-
-  // New state for MVP content generation
   const [mvpContent, setMvpContent] = useState<MVPContentData | null>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false); // For copy button feedback
-  
-  // For GitHub deployment errors
+  const [copied, setCopied] = useState<boolean>(false);
   const [deploymentError, setDeploymentError] = useState<string | null>(null);
-  const [isDeploying, setIsDeploying] = useState(false); // For deployment loading state
-  const [deploymentSuccess, setDeploymentSuccess] = useState<string | null>(null);
-
-  // Add router to handle URL parameters
-  const router = useRouter();
+  const [isDeploying, setIsDeploying] = useState<boolean>(false);
+  const [deploymentSuccess, setDeploymentSuccess] = useState<boolean>(false);
   
-  // Handle URL parameters for step, error, and installation_id
+  // Ensure component returns JSX
+  if (!router.isReady) {
+    return <div>Loading...</div>;
+  }
+  
+  // Define handleInstallation function
+  const handleInstallation = useCallback((installationId: number) => {
+    setFormState(prev => ({
+      ...prev,
+      installationId
+    }));
+    setGithubInstallSuccess(true);
+  }, [setFormState, setGithubInstallSuccess]);
+  
+  // Handle repository selection
+  const handleRepoSelected = useCallback((repoFullName: string) => {
+    console.log('Repository selected:', repoFullName);
+    setSelectedRepoFullName(repoFullName);
+    localStorage.setItem('selected_repo_full_name', repoFullName);
+    
+    const [userLogin, repoName] = repoFullName.split('/');
+    if (userLogin && repoName) {
+      setFormState(prev => ({
+        ...prev,
+        userLogin,
+        repoName
+      }));
+    }
+  }, [setFormState, setSelectedRepoFullName]);
+
+  // Handle GitHub App installation
+  const handleInstallApp = useCallback(() => {
+    // Use the GitHub App installation URL from environment variables or fallback to default
+    const installUrl = process.env.NEXT_PUBLIC_GITHUB_APP_INSTALL_URL || 'https://github.com/apps/quickfolio/installations/new';
+    console.log('Redirecting to GitHub App installation:', installUrl);
+    window.location.href = installUrl;
+  }, []);
+
+  // Helper function to ensure GitHub username is available
+  const ensureGitHubUsername = useCallback(async (): Promise<string> => {
+    if (formState.userLogin) {
+      return formState.userLogin;
+    }
+    
+    try {
+      setDeploymentError(null);
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const url = `${apiUrl}/github/user?installation_id=${formState.installationId}`;
+      
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error('Failed to fetch GitHub username');
+      }
+      
+      const data = await response.json();
+      const username = data.login;
+      
+      if (!username) {
+        throw new Error('GitHub username not found');
+      }
+      
+      setFormState(prev => ({
+        ...prev,
+        userLogin: username
+      }));
+      
+      return username;
+    } catch (err) {
+      const error = err as Error;
+      setDeploymentError(`Error fetching GitHub username: ${error.message}`);
+      return '';
+    }
+  }, [formState.installationId, formState.userLogin]);
+
+  // Handle deployment
+  const handleDeploy = useCallback(async () => {
+    if (!mvpContent) {
+      setDeploymentError('No content generated to deploy.');
+      return;
+    }
+
+    try {
+      setDeploymentError(null);
+      setIsDeploying(true);
+
+      const response = await fetch('/api/deploy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...formState,
+          mvpContent,
+          repoFullName: selectedRepoFullName,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Deployment failed');
+      }
+
+      const data = await response.json();
+      setDeploymentSuccess(true);
+      // Handle successful deployment (e.g., show success message, redirect, etc.)
+    } catch (err) {
+      const error = err as Error;
+      console.error('Deployment error:', error);
+      setDeploymentError(error.message || 'Failed to deploy. Please try again.');
+    } finally {
+      setIsDeploying(false);
+    }
+  }, [formState, mvpContent, selectedRepoFullName]);
+  
+  // Effect to retrieve installation ID from localStorage on component mount
+  useEffect(() => {
+    const savedInstallationId = localStorage.getItem('github_installation_id');
+    if (savedInstallationId) {
+      try {
+        const id = parseInt(savedInstallationId, 10);
+        if (!isNaN(id)) {
+          handleInstallation(id);
+        }
+      } catch (e) {
+        console.error('Error parsing installation ID:', e);
+      }
+    }
+
+    // Check for GitHub redirect with installation_id in URL
+    if (router.query.installation_id) {
+      const queryId = router.query.installation_id as string;
+      try {
+        const id = parseInt(queryId, 10);
+        if (!isNaN(id)) {
+          localStorage.setItem('github_installation_id', id.toString());
+          handleInstallation(id);
+        }
+      } catch (e) {
+        console.error('Error parsing URL installation ID:', e);
+      }
+    }
+    
+    // Restore selected repo from localStorage if available
+    const savedRepoFullName = localStorage.getItem('selected_repo_full_name');
+    if (savedRepoFullName) {
+      setSelectedRepoFullName(savedRepoFullName);
+      const [user, repo] = savedRepoFullName.split('/');
+      if (user && repo) {
+        setFormState(prev => ({
+          ...prev,
+          userLogin: user,
+          repoName: repo
+        }));
+      }
+    }
+  }, [router.query, handleInstallation]);
+
+  // Handle URL parameters for GitHub App installation
   useEffect(() => {
     if (!router.isReady) return;
     
-    const { query } = router;
-
-    // Attempt to get GitHub username from localStorage if not already set
-    const storedUserLogin = localStorage.getItem('github_user_login');
-    if (storedUserLogin && !formState.userLogin) {
-      setFormState(prev => ({ ...prev, userLogin: storedUserLogin }));
-    }
-
-    // Check if we need to set a specific step
-    const storedInstallationId = localStorage.getItem('github_installation_id');
-    if (storedInstallationId) {
-      console.log('Loaded installation ID from localStorage:', storedInstallationId);
-      setFormState(prev => ({ ...prev, installationId: parseInt(storedInstallationId, 10) }));
-    }
-
-    const storedRepoFullName = localStorage.getItem('selected_repo_full_name');
-    if (storedRepoFullName) {
-      console.log('Loaded selected_repo_full_name from localStorage:', storedRepoFullName);
-      setSelectedRepoFullName(storedRepoFullName);
-      const parts = storedRepoFullName.split('/');
-      let user = '';
-      let repo = '';
-      if (parts.length === 2) {
-        user = parts[0];
-        repo = parts[1];
-      } else if (storedRepoFullName.endsWith('.github.io')) {
-        user = storedRepoFullName.substring(0, storedRepoFullName.indexOf('.github.io'));
-        repo = storedRepoFullName; // The full name is the repo name in this case
-      }
-      if (user) {
-        setFormState(prev => ({ ...prev, userLogin: user, repoName: repo }));
-      }
-    }
-
-    const storedGithubRepoId = localStorage.getItem('github_repo_id');
-    if (storedGithubRepoId) {
-      console.log('Loaded github_repo_id from localStorage:', storedGithubRepoId);
-      setGithubRepoId(storedGithubRepoId);
-    }
-
-    // The redundant 'storedUserLogin' block has been removed.
-    // Its logic is covered by the 'storedUserLogin' declaration and handling
-    // earlier in this useEffect hook (around line 115).
-
-    const storedRepoName = localStorage.getItem('github_repo_name');
-    if (storedRepoName && !formState.repoName) { // Only if not already set by selected_repo_full_name logic
-        console.log('Loaded github_repo_name from localStorage (fallback):', storedRepoName);
-        setFormState(prev => ({...prev, repoName: storedRepoName}));
-    }
-
-    if (query.step) {
-      const step = query.step as CreationStep;
-      if (['upload', 'customize', 'theme', 'preview', 'deploy'].includes(step)) {
-        setCurrentStep(step);
-      }
+    const handleInstallation = () => {
+      const params = new URLSearchParams(window.location.search);
+      const { error, error_description } = router.query;
+      const installationId = params.get('installation_id');
+      const setupAction = params.get('setup_action');
       
-      // If we're on the deploy step and have a success parameter, check for content in localStorage
-      if (step === 'deploy') {
-        if (query.success === 'true') {
-            const savedContent = localStorage.getItem('mvp_content');
-            if (savedContent) {
-              try {
-                const parsedContent = JSON.parse(savedContent) as MVPContentData;
-                setMvpContent(parsedContent);
-              } catch (e) {
-                console.error('Failed to parse content from localStorage:', e);
-              }
-            }
-        }
-        // Ensure we also load selected repo details if on deploy step and they are missing
-        const deployStepRepoFullName = localStorage.getItem('selected_repo_full_name');
-        if (deployStepRepoFullName && !selectedRepoFullName) {
-          console.log('Loaded selected_repo_full_name for deploy step (fallback):', deployStepRepoFullName);
-          setSelectedRepoFullName(deployStepRepoFullName);
-          // Potentially re-parse userLogin/repoName if needed from deployStepRepoFullName here
-        }
-        const deployStepInstallationId = localStorage.getItem('github_installation_id');
-        if (deployStepInstallationId && !formState.installationId) {
-            console.log('Loaded installation ID for deploy step (fallback):', deployStepInstallationId);
-            setFormState(prev => ({ ...prev, installationId: parseInt(deployStepInstallationId, 10) }));
-        }
-        if (storedUserLogin) { // This is the original if condition from the user, which is now redundant due to the earlier load. Keep it for safety, or remove if confirmed redundant.
-          // This setFormState was for the original storedUserLogin, which is now deployStepUserLogin
-          // The logic is now handled by the 'if (deployStepUserLogin && !formState.userLogin)' block above.
-        }
-      }
-    }
-    
-    // Check for error parameter from backend redirects
-    if (query.error) {
-      // Distinguish between general errors and GitHub App specific errors
-      if (query.error === 'app_install_url_failed' || query.error === 'app_callback_invalid_params') {
-        setDeploymentError(`GitHub App setup failed: ${query.error_description || query.error}`);
-      } else {
-        setDeploymentError(query.error as string);
-      }
-    }
-
-    // Check for installation_id from GitHub App callback
-    if (query.installation_id) {
-      console.log(`GitHub App Installation ID detected in URL: ${query.installation_id}`);
-      const instId = parseInt(query.installation_id as string, 10);
-      if (!isNaN(instId)) {
-        console.log(`Setting installation ID ${instId} in form state and localStorage`);
-        setFormState(prev => ({ ...prev, installationId: instId }));
-        // Store in localStorage if user navigates away and comes back
-        localStorage.setItem('github_installation_id', instId.toString());
+      if (!installationId) return;
+      
+      // Check for successful installation
+      if (setupAction === 'install' || setupAction === 'update') {
+        console.log('GitHub App installed/updated with installation_id:', installationId);
         
-        // Set installation success flag to show user a message
-        setGithubInstallSuccess(true);
+        // Parse the installation ID
+        const installationIdNum = parseInt(installationId, 10);
+        if (isNaN(installationIdNum)) {
+          console.error('Invalid installation ID:', installationId);
+          return;
+        }
         
-        // Critical: ALWAYS force the step to 'deploy' after GitHub redirect
-        setCurrentStep('deploy');
+        // Update form state with the installation ID
+        setFormState(prev => ({
+          ...prev,
+          installationId: installationIdNum
+        }));
         
-        // Attempt to restore the previous repository selection
+        // Store in localStorage for persistence
+        localStorage.setItem('github_installation_id', installationId);
+        console.log('Saved GitHub installation ID to localStorage');
+        
+        // Restore repository selection if available
         const storedRepoName = localStorage.getItem('selected_repo_full_name');
         if (storedRepoName && !selectedRepoFullName) {
           console.log(`Restoring repository selection: ${storedRepoName}`);
@@ -232,11 +311,11 @@ const Create: NextPage = () => {
           // Parse user/repo from the full name
           if (storedRepoName.includes('/')) {
             const [user, repo] = storedRepoName.split('/');
-            setFormState(prev => ({ ...prev, userLogin: user, repoName: repo }));
-          } else if (storedRepoName.startsWith('/')) {
-            // Handle cases with leading slash
-            const repoWithoutSlash = storedRepoName.substring(1);
-            setFormState(prev => ({ ...prev, repoName: repoWithoutSlash }));
+            setFormState(prev => ({
+              ...prev,
+              userLogin: user || prev.userLogin,
+              repoName: repo || prev.repoName
+            }));
           }
         }
         
@@ -252,79 +331,120 @@ const Create: NextPage = () => {
           }
         }
         
-        // Debug current state after installation
-        console.log('Current form state after GitHub callback:', {
-          installationId: instId,
-          step: 'deploy', // We're forcing this now
-          selectedRepo: storedRepoName || selectedRepoFullName,
-          contentRestored: !!savedContent
-        });
+        // Force move to deploy step after successful installation
+        setCurrentStep('deploy');
         
         // Clean up URL query parameters after processing
-        const { pathname, query: currentQuery } = router;
-        delete currentQuery.installation_id;
-        delete currentQuery.setup_action; // if you also handle setup_action
-        router.replace({ pathname, query: currentQuery }, undefined, { shallow: true });
+        const cleanUrl = window.location.pathname;
+        window.history.replaceState({}, document.title, cleanUrl);
+        
+        // Show success message
+        setGithubInstallSuccess(true);
       }
-    }
-
-  }, [router.isReady, router.query]); // Added formState.userLogin to dependencies if it's used to fetch
-
-  // Effect to retrieve installation ID from localStorage on component mount
-  useEffect(() => {
-    const storedInstallationId = localStorage.getItem('github_installation_id');
-    if (storedInstallationId) {
-      setFormState(prev => ({ ...prev, installationId: parseInt(storedInstallationId, 10) }));
-    }
-    // Try to get userLogin from local storage if available
-    const ghUser = localStorage.getItem('github_user_login');
-    if (ghUser && !formState.userLogin) {
-      setFormState(prev => ({ ...prev, userLogin: ghUser }));
-    }
-  }, []); // Empty dependency array ensures this runs only on mount
-
-  // Handler for when a repository is selected or its name is confirmed
-  const handleRepoSelected = async (repoFullName: string) => {
-    console.log('Repository selected:', repoFullName);
-    setSelectedRepoFullName(repoFullName);
-    localStorage.setItem('selected_repo_full_name', repoFullName);
-    setRepoValidationError(null); // Clear previous errors
-    setGithubRepoId(null); // Reset repo ID
+      // Handle installation errors
+      else if (params.get('error')) {
+        const error = params.get('error');
+        const errorDescription = params.get('error_description');
+        console.error('GitHub App installation error:', error, errorDescription);
+        
+        // Clean up the URL
+        const cleanUrl = window.location.pathname;
+        window.history.replaceState({}, document.title, cleanUrl);
+        
+        // Show error to user
+        setDeploymentError(
+          `GitHub App installation failed: ${errorDescription || error || 'Unknown error'}. ` +
+          'Please try again or contact support if the issue persists.'
+        );
+      }
+    };
     
-    // When a new repository is selected, we should:
-    // 1. Clear the existing installation if it's for a different repository
-    // 2. Force a new GitHub authentication flow
-    // This ensures the installationId has proper access to this specific repository
-    
-    // Reset installation state for new repository selection
-    // This is critical - we don't want to reuse an installation for a different repo
-    if (formState.installationId) {
-      console.log('Clearing existing installation ID for new repository selection');
-      setFormState(prev => ({ ...prev, installationId: null }));
-      localStorage.removeItem('github_installation_id');
-      setDeploymentError(null); // Clear any previous deployment errors
-    }
-    
-    // Ensure the installation URL points back to the create page for callback handling
-    const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://quickfolio.onrender.com';
-    const redirectUri = `${currentOrigin}/create`;
-    setGithubAppInstallUrl(`https://github.com/apps/quickfolio/installations/new?redirect_uri=${encodeURIComponent(redirectUri)}`);
+    handleInstallation();
+  }, [router.isReady, router.query, mvpContent, selectedRepoFullName, formState.userLogin]);
 
-    const parts = repoFullName.split('/');
-    const actualRepoName = parts.length > 1 ? parts[1] : repoFullName;
-    setFormState(prev => ({ ...prev, repoName: actualRepoName }));
+  // Main component render
+  return (
+    <div className="min-h-screen flex flex-col bg-gray-50">
+      <Header />
+      <main className="flex-grow container mx-auto px-4 py-8">
+        <div className="max-w-4xl mx-auto">
+          {/* Step indicator */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between">
+              {['upload', 'customize', 'theme', 'preview', 'deploy'].map((step, index) => (
+                <React.Fragment key={step}>
+                  <div 
+                    className={`flex items-center justify-center w-10 h-10 rounded-full ${currentStep === step ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'}`}
+                  >
+                    {index + 1}
+                  </div>
+                  {index < 4 && (
+                    <div className="flex-1 h-1 bg-gray-200 mx-2"></div>
+                  )}
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
 
-    if (formState.userLogin && repoFullName) {
-      await validateAndGetRepoId(repoFullName, formState.userLogin);
-    }
-  };
+          {/* Error display */}
+          {deploymentError && (
+            <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 text-red-700">
+              <p>{deploymentError}</p>
+            </div>
+          )}
 
-  // Function to validate repository and get its ID
-  const validateAndGetRepoId = async (repoFullName: string, githubUsername: string) => {
+          {/* Success message */}
+          {githubInstallSuccess && (
+            <div className="mb-6 p-4 bg-green-50 border-l-4 border-green-500 text-green-700">
+              <p>GitHub App installed successfully! You can now proceed with deployment.</p>
+            </div>
+          )}
+
+          {/* Step content will be rendered here */}
+          <div className="bg-white rounded-lg shadow p-6">
+            {currentStep === 'deploy' && (
+              <div>
+                <h2 className="text-2xl font-bold mb-4">Deploy Your Portfolio</h2>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      GitHub Repository
+                    </label>
+                    <RepoSelector 
+                      onRepoSelected={handleRepoSelected}
+                      installationId={formState.installationId}
+                    />
+                  </div>
+                  
+                  <div className="pt-4">
+                    <button
+                      onClick={handleDeploy}
+                      disabled={!selectedRepoFullName || !formState.installationId}
+                      className={`w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
+                        !selectedRepoFullName || !formState.installationId
+                          ? 'bg-gray-400 cursor-not-allowed'
+                          : 'bg-blue-600 hover:bg-blue-700'
+                      }`}
+                    >
+                      {isDeploying ? 'Deploying...' : 'Deploy to GitHub Pages'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </main>
+      <Footer />
+    </div>
+  );
+};
+
+// Helper functions that should be outside the component
+const validateAndGetRepoId = async (repoFullName: string, githubUsername: string) => {
+  try {
     setIsRepoValidating(true);
     setRepoValidationError(null);
-    try {
-      // Construct the API URL using NEXT_PUBLIC_API_URL if available, otherwise assume relative path
       const apiUrlBase = process.env.NEXT_PUBLIC_API_URL || '';
       const response = await fetch(`${apiUrlBase}/api/github/validate-repository`, {
         method: 'POST',
@@ -361,386 +481,8 @@ const Create: NextPage = () => {
     setIsRepoValidating(false);
   };
 
-  // Theme selection handler
-  const handleThemeSelect = (themeId: string) => {
-    setFormState((prev: FormState) => ({ ...prev, themeId }));
-  };
-  
-  // Function to proceed from theme selection to preview
-  const handleProceedToPreview = () => {
-    setCurrentStep('preview');
-  };
-
-  // Handler for text area resume input
-  const handleResumeTextChange = (e: { target: { value: string } }) => {
-    setFormState({
-      ...formState,
-      resumeText: e.target.value,
-    });
-    if (e.target.value.trim() !== '') {
-      setUploadError(null); // Clear error if user starts typing
-    }
-  };
-
-  // Generic handler for form input changes
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value, type } = e.target;
-    // Need a type assertion for 'checked' property on HTMLInputElement
-    const isCheckbox = type === 'checkbox' && e.target instanceof HTMLInputElement;
-    setFormState(prev => ({
-      ...prev,
-      [name]: isCheckbox ? (e.target as HTMLInputElement).checked : value,
-    }));
-  };
-
-  const handleFileChange = (e: { target: { files: FileList | null } }) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    
-    const file = files[0];
-    // Validate file is PDF
-    if (file.type !== 'application/pdf') {
-      setUploadError('Please upload a PDF file');
-      // Also clear resumeText if a file error occurs, to avoid confusion
-      // setFormState(prev => ({ ...prev, resumeFile: null })); 
-      return;
-    }
-    
-    // Clear previous error if any
-    setUploadError(null);
-    
-    // Update form state
-    setFormState({
-      ...formState,
-      resumeFile: file,
-    });
-  };
-  
-  // Function to generate TOML configuration for Hugo (Lynx theme)
-  const generateTomlConfig = (content: MVPContentData): string => {
-    let tomlString = `baseURL = "https://example.com/" # Replace with your actual domain
-languageCode = "en-us"
-title = "${content.profile.name}&apos;s Links"
-theme = "lynx"
-
-[params]
-  author = "${content.profile.name}"
-  description = "${content.profile.headline}"
-  copyright = "  ${new Date().getFullYear()} ${content.profile.name}. All rights reserved."
-  
-  # Avatar settings
-  avatar = "${content.profile.avatar || 'avatar.png'}" # Default if not provided by AI
-  favicon = "favicon.ico" # Make sure you have this in your static folder
-  
-  # Social icons and other settings can be added here if needed by Lynx
-  # For MVP, we're focusing on profile and main links.
-
-[profile]
-  name = "${content.profile.name}"
-  headline = "${content.profile.headline}"
-  # avatar is usually handled by params.avatar in Lynx
-
-`;
-
-    content.links.forEach(link => {
-      tomlString += `\n[[params.links]]
-  text = "${link.text}"
-  url = "${link.url}"
-${link.icon ? `  icon = "${link.icon}"` : ''}
-${link.type ? `  type = "${link.type}"` : ''}
-`;
-    });
-
-    return tomlString.trim();
-  };
-
-  // Handle copying the configuration to clipboard
-  const handleCopyConfig = () => {
-    if (!mvpContent || !getTheme(formState.themeId)) return;
-    
-    const configContent = getTheme(formState.themeId)?.generator(mvpContent).content;
-    if (configContent) {
-      navigator.clipboard.writeText(configContent);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-  
-  // Dynamically render the theme preview component
-  const renderThemePreview = (themeId: string, data: MVPContentData) => {
-    const theme = getTheme(themeId);
-    if (!theme) return null;
-    
-    const PreviewComponent = theme.previewComponent;
-    return <PreviewComponent data={data} />;
-  };
-
-  /**
-   * Process resume from either text input or PDF file upload
-   * Handles sending data to the backend for MVP content generation
-   */
-  const handleProcessResume = async (e: { preventDefault: () => void }) => {
-    e.preventDefault();
-    
-    // Validate input - require either text or file
-    if (!formState.resumeText.trim() && !formState.resumeFile) {
-      setUploadError('Please paste your resume text or upload a PDF file.');
-      return;
-    }
-    
-    setIsGenerating(true);
-    setGenerationError(null);
-    setUploadError(null);
-    setMvpContent(null);
-    
-    try {
-      // If we have text input, use that directly
-      if (formState.resumeText.trim()) {
-        console.log('Using text input for content generation');
-        await generateMVPContent(formState.resumeText);
-        return;
-      }
-      
-      // If we have a file but no text, process the file
-      if (formState.resumeFile) {
-        console.log('Processing resume file:', formState.resumeFile.name);
-        
-        // Create FormData for file upload
-        const formData = new FormData();
-        formData.append('resume_file', formState.resumeFile);
-        
-        // Get API base URL from environment variables
-        const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || '';
-        console.log(`Uploading resume to: ${apiBaseUrl || 'relative path'}/upload-resume`);
-        
-        // Upload the resume file to the backend
-        const uploadResponse = await fetch(`${apiBaseUrl}/upload-resume`, {
-          method: 'POST',
-          body: formData,
-          credentials: 'include',
-          mode: 'cors',
-        });
-        
-        // Check if the upload was successful
-        if (!uploadResponse.ok) {
-          let errorMessage = `Upload failed: ${uploadResponse.status} ${uploadResponse.statusText}`;
-          try {
-            const errorData = await uploadResponse.json();
-            errorMessage = errorData.detail || errorData.message || errorMessage;
-          } catch (e) {
-            console.error('Failed to parse error response:', e);
-          }
-          throw new Error(errorMessage);
-        }
-        
-        // Parse the successful response
-        const uploadData = await uploadResponse.json();
-        console.log('Resume upload successful:', uploadData);
-        
-        // Extract resume text from the response
-        let resumeText = '';
-        if (uploadData.resume_data?.raw_text) {
-          resumeText = uploadData.resume_data.raw_text;
-        } else if (uploadData.resume_data) {
-          // If we have structured data but no raw text, convert it to a string
-          resumeText = JSON.stringify(uploadData.resume_data, null, 2);
-        } else {
-          throw new Error('No resume data found in response');
-        }
-        
-        // Generate MVP content from the extracted text
-        await generateMVPContent(resumeText);
-        return;
-      }
-      
-      // If we get here, there's no file or text to process
-      setUploadError('Please upload a resume file or enter your information');
-      setIsGenerating(false);
-      
-    } catch (error) {
-      console.error('Error during resume processing:', error);
-      
-      // Set appropriate error message
-      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-      setUploadError(`Failed to process resume: ${errorMessage}`);
-      
-      // For demo purposes, fall back to demo content
-      console.warn('Falling back to demo content due to error');
-      const demoText = `Name: Demo User\nTitle: Software Developer\nExperience: 5 years of software development\nSkills: JavaScript, React, Node.js\nEducation: Computer Science degree\nContact: demo@example.com\nLinkedIn: linkedin.com/in/demo\nGitHub: github.com/demo`;
-      await generateMVPContent(demoText);
-    }
-  };
-  
-  /**
-   * Makes API call to generate MVP content from resume text
-   * @param resumeText - The resume text to process
-   */
-  const generateMVPContent = async (resumeText: string): Promise<void> => {
-    if (!resumeText.trim()) {
-      setUploadError('Resume text cannot be empty');
-      setIsGenerating(false);
-      return;
-    }
-
-    try {
-      // Construct the API URL using environment variable if available
-      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || '';
-      console.log(`Using API base URL: ${apiBaseUrl || 'relative path'} for content generation`);
-
-      const response = await fetch(`${apiBaseUrl}/generate-mvp-content`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        credentials: 'include',
-        mode: 'cors',
-        body: JSON.stringify({
-          resume_text: resumeText,
-        }),
-      });
-
-      // Check if the API response was successful
-      if (!response.ok) {
-        let errorMessage = `API request failed with status ${response.status} ${response.statusText}`;
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.detail || errorData.message || errorMessage;
-        } catch (e) {
-          console.error('Failed to parse error response:', e);
-        }
-        throw new Error(errorMessage);
-      }
-
-      const data: MVPContentGenerationResponse = await response.json();
-      console.log('API Response:', data);
-
-      // Check if we got valid MVP content
-      if (data.mvp_content) {
-        setMvpContent(data.mvp_content);
-        setCurrentStep('theme'); // Move to theme selection step on success
-      } else if (data.raw_ai_response) {
-        // If we have raw AI response but no parsed content, use it as fallback
-        console.warn('Using raw AI response as fallback');
-        return generateDemoContent(data.raw_ai_response);
-      } else {
-        // API returned success but no content - use fallback
-        console.warn('API returned no MVP content. Using demo fallback data.');
-        return generateDemoContent(resumeText);
-      }
-    } catch (error) {
-      // Network or parsing errors - use fallback for demo
-      console.error('Error during MVP content generation:', error);
-      console.warn('Using demo fallback data due to error.');
-      return generateDemoContent(resumeText);
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-  
-  /**
-   * Generates demo content based on input text for testing when API is unavailable
-   * @param resumeText - Raw resume text to extract basic information from
-   */
-  const generateDemoContent = (resumeText: string): void => {
-    // Extract a name from the resumeText, or use a default
-    const nameMatch = resumeText.match(/name:\s*([^\n]+)/i) || 
-                     resumeText.match(/([A-Z][a-z]+ [A-Z][a-z]+)/) || 
-                     [null, 'John Doe'];
-    const name = nameMatch[1].trim();
-    
-    // Try to extract a title/headline
-    const titleMatch = resumeText.match(/title:\s*([^\n]+)/i) || 
-                      resumeText.match(/position:\s*([^\n]+)/i) || 
-                      resumeText.match(/([A-Za-z]+ Engineer|Developer|Designer|Programmer|Architect)/i) || 
-                      [null, 'Software Developer'];
-    const title = titleMatch[1].trim();
-    
-    // Create a sample avatar filename based on the name
-    const avatar = `${name.toLowerCase().replace(/\s+/g, '_')}.jpg`;
-    
-    // Demo MVP content with some standard links
-    const demoContent: MVPContentData = {
-      profile: {
-        name,
-        headline: title,
-        avatar
-      },
-      links: [
-        {
-          text: 'GitHub',
-          url: `https://github.com/${name.toLowerCase().replace(/\s+/g, '')}`
-        },
-        {
-          text: 'LinkedIn',
-          url: `https://linkedin.com/in/${name.toLowerCase().replace(/\s+/g, '-')}`,
-          icon: 'linkedin'
-        },
-        {
-          text: 'Portfolio',
-          url: `https://${name.toLowerCase().replace(/\s+/g, '')}.dev`
-        },
-        {
-          text: 'Email',
-          url: `mailto:${name.toLowerCase().replace(/\s+/g, '.')}@example.com`,
-          icon: 'envelope'
-        },
-        {
-          text: 'Resume',
-          url: `#`,
-          icon: 'file-pdf'
-        }
-      ]
-    };
-    
-    // Set the demo content and proceed to theme selection
-    setMvpContent(demoContent);
-    setIsGenerating(false);
-    setCurrentStep('theme');
-  };
-  
-  /**
-   * Attempt to extract GitHub username from repository info if missing
-   */
-  const ensureGitHubUsername = (): boolean => {
-    // If username already set, we're good
-    if (formState.userLogin && formState.userLogin.trim()) {
-      return true;
-    }
-    
-    // Try to extract from selectedRepoFullName
-    if (selectedRepoFullName) {
-      console.log('Attempting to extract GitHub username from repo:', selectedRepoFullName);
-      let extractedUsername = '';
-      
-      if (selectedRepoFullName.includes('/')) {
-        // Format: owner/repo
-        const parts = selectedRepoFullName.split('/');
-        if (parts.length >= 2 && parts[0]) {
-          extractedUsername = parts[0];
-        }
-      } else if (selectedRepoFullName.endsWith('.github.io')) {
-        // Format: username.github.io
-        extractedUsername = selectedRepoFullName.replace('.github.io', '');
-      }
-      
-      if (extractedUsername) {
-        console.log('Successfully extracted GitHub username:', extractedUsername);
-        setFormState(prev => ({ ...prev, userLogin: extractedUsername }));
-        localStorage.setItem('github_user_login', extractedUsername);
-        return true;
-      }
-    }
-    
-    return false;
-  };
-
-  /**
-   * Handle deployment to GitHub Pages
-   * Uses the GitHub App installation and a pre-selected repository
-   * to deploy the generated portfolio with least-privilege permissions
-   */
-  const handleDeploy = async (): Promise<void> => {
+  // Handle deployment
+  const handleDeploy = useCallback(async () => {
     if (!mvpContent) {
       setDeploymentError('No content generated to deploy.');
       return;
@@ -786,26 +528,36 @@ ${link.type ? `  type = "${link.type}"` : ''}
     // Parse repository information from selectedRepoFullName
     // Handle various formats: user/repo, repo, /repo
     let owner = formState.userLogin || '';
-    let repo = '';
+    let repo = selectedRepoFullName || '';
     
-    if (selectedRepoFullName) {
-      if (selectedRepoFullName.includes('/')) {
-        // Format: user/repo
-        const parts = selectedRepoFullName.split('/');
-        if (parts.length === 2) {
-          // Normal case: user/repo
-          [owner, repo] = parts;
-        } else if (parts.length === 1) {
-          // Leading slash: /repo
-          repo = parts[0];
+    try {
+      if (selectedRepoFullName) {
+        if (selectedRepoFullName.includes('/')) {
+          // Format: user/repo
+          const parts = selectedRepoFullName.split('/');
+          if (parts.length === 2) {
+            // Normal case: user/repo
+            [owner, repo] = parts;
+          } else if (parts.length === 1) {
+            // Leading slash: /repo
+            repo = parts[0];
+          }
         }
-      } else {
-        // No slash, just repo name
-        repo = selectedRepoFullName;
+        // If no slash, use the full name as repo name
       }
+      
+      console.log('Parsed repository information:', { owner, repo });
+      
+      // Validate we have all required parts
+      if (!owner || !repo) {
+        throw new Error(`Could not determine owner and repo from: ${selectedRepoFullName}`);
+      }
+    } catch (error) {
+      console.error('Error parsing repository information:', error);
+      setDeploymentError(`Invalid repository format: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setIsDeploying(false);
+      return;
     }
-    
-    console.log('Parsed repository information:', { owner, repo });
 
     // Create FormData with guaranteed string values to fix TypeScript errors
     const formData = new FormData();
@@ -1122,20 +874,33 @@ ${link.type ? `  type = "${link.type}"` : ''}
                   </div>
                 </div>
 
-                <div className="flex justify-between pt-6 mt-6 border-t border-gray-200">
+                <div className="flex flex-col sm:flex-row justify-between pt-6 mt-6 border-t border-gray-200 gap-4">
                   <button 
+                    type="button"
                     onClick={() => setCurrentStep('theme')} 
-                    className="text-gray-600 hover:text-gray-800 transition-colors"
+                    className="px-6 py-2 text-gray-700 hover:bg-gray-100 rounded-md border border-gray-300 transition-colors"
                   >
-                    ← Change Theme
+                    ← Back to Themes
                   </button>
-                  
-                  <button
-                    onClick={() => setCurrentStep('deploy')}
-                    className="px-8 py-3 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors font-semibold"
-                  >
-                    Proceed to Deploy
-                  </button>
+                  <div className="flex flex-col items-end gap-2">
+                    {!formState.themeId && (
+                      <p className="text-sm text-amber-600">
+                        ⚠️ Please select a theme to continue
+                      </p>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleProceedToPreview}
+                      className={`px-6 py-3 rounded-lg font-semibold transition-colors ${
+                        formState.themeId
+                          ? 'bg-primary text-white hover:bg-primary-dark' 
+                          : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                      }`}
+                      disabled={!formState.themeId}
+                    >
+                      Continue to Preview
+                    </button>
+                  </div>
                 </div>
 
               </div>
@@ -1221,15 +986,14 @@ ${link.type ? `  type = "${link.type}"` : ''}
                       You&apos;ve selected: <strong className="text-indigo-600">{selectedRepoFullName}</strong>.
                       Now, install the Quickfolio GitHub App for this repository.
                     </p>
-                    <a
-                      href={githubAppInstallUrl} // Updated href
-                      target="_blank" // Open in new tab for GitHub flow
-                      rel="noopener noreferrer"
+                    <button
+                      onClick={handleInstallApp}
+                      type="button"
                       className="inline-flex items-center justify-center px-6 py-3 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition-colors font-semibold shadow-md"
                     >
                       <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fillRule="evenodd" d="M10 0C4.477 0 0 4.477 0 10c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.483 0-.237-.009-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-.916-1.466-.916-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.031-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0110 4.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.378.201 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.338 4.695-4.566 4.942.359.308.678.92.678 1.852 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.001 10.001 0 0020 10c0-5.523-4.477-10-10-10z" clipRule="evenodd"></path></svg>
                       Install Quickfolio GitHub App for {selectedRepoFullName}
-                    </a>
+                    </button>
                   </div>
                 )}
                 {!selectedRepoFullName && formState.userLogin && (
