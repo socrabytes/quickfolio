@@ -648,7 +648,7 @@ const validateAndGetRepoId = async (repoFullName: string, githubUsername: string
       }
     }  
     setIsDeploying(false);
-  };
+  }, [mvpContent, formState, selectedRepoFullName, githubAppInstallUrl, repoValidationError, githubRepoId]);
 
 
   return (
