@@ -305,9 +305,19 @@ Ensure your entire output is a single, valid JSON object, starting with {{ and e
     try:
         model = genai.GenerativeModel(model_name=model_name, generation_config=generation_config, safety_settings=safety_settings)
         response = await model.generate_content_async(prompt)
+        
+        # Check if the response is valid and has content
+        if not hasattr(response, 'text') or not response.text:
+            error_msg = "Received empty or invalid response from Gemini API"
+            logger.error(f"{error_msg}. Response: {response}")
+            return MVPContentGenerationResponse(
+                error=error_msg,
+                debug_info={"model_used": model_name, "prompt_length": len(prompt)}
+            )
+            
         raw_ai_response = response.text
         logger.info("Received response from Gemini.")
-        # logger.debug(f"Raw AI Response: \n{raw_ai_response}")
+        logger.debug(f"Raw AI Response for MVP content: \n{raw_ai_response}") # Temporarily uncommented for debugging
 
         def normalize_urls(data):
             """Normalize URLs to ensure they have proper protocols before validation."""
@@ -374,12 +384,23 @@ Ensure your entire output is a single, valid JSON object, starting with {{ and e
             )
 
     except Exception as e:
-        logger.error(f"Error calling Gemini API: {e}", exc_info=True)
-        # Check for specific Gemini API errors if the SDK provides them
-        # For example, if hasattr(e, 'message'): error_detail = e.message
+        error_msg = f"Error calling Gemini API: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        
+        # Extract more detailed error information if available
+        error_detail = str(e)
+        if hasattr(e, 'message'):
+            error_detail = e.message
+        elif hasattr(e, 'details') and e.details:
+            error_detail = e.details
+            
         return MVPContentGenerationResponse(
-            error=f"An unexpected error occurred with the AI service: {str(e)}",
-            debug_info={"prompt_length": len(prompt), "model_used": model_name}
+            error=f"An error occurred with the AI service: {error_detail}",
+            debug_info={
+                "model_used": model_name,
+                "prompt_length": len(prompt),
+                "error_type": type(e).__name__
+            }
         )
 
 

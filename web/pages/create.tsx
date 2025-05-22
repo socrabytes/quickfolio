@@ -78,7 +78,7 @@ const Create: NextPage = () => {
   const [githubRepoId, setGithubRepoId] = useState<string | null>(null); // Will be used later
   const [githubAppInstallUrl, setGithubAppInstallUrl] = useState<string>(
     'https://github.com/apps/quickfolio/installations/new'
-  ); // Default URL
+  ); // Default URL - Using 'quickfolio' as the app slug
 
   // State for repository validation
   const [isRepoValidating, setIsRepoValidating] = useState<boolean>(false);
