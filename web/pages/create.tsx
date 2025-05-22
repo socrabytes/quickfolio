@@ -585,15 +585,15 @@ ${link.type ? `  type = "${link.type}"` : ''}
       // Construct the API URL using environment variable if available
       const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || '';
       console.log(`Using API base URL: ${apiBaseUrl || 'relative path'} for content generation`);
-      
+
       const response = await fetch(`${apiBaseUrl}/generate-mvp-content`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
         },
-        credentials: 'include',  // Include credentials (cookies, HTTP authentication)
-        mode: 'cors',  // Enable CORS mode
+        credentials: 'include',
+        mode: 'cors',
         body: JSON.stringify({
           resume_text: resumeText,
         }),
@@ -601,33 +601,27 @@ ${link.type ? `  type = "${link.type}"` : ''}
 
       // Check if the API response was successful
       if (!response.ok) {
-        // If the API fails with a 500 error, we'll use a fallback response for demo purposes
-        if (response.status === 500) {
-          console.warn('Backend API failed with 500 error. Using demo fallback data.');
-          return generateDemoContent(resumeText);
+        let errorMessage = `API request failed with status ${response.status} ${response.statusText}`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.detail || errorData.message || errorMessage;
+        } catch (e) {
+          console.error('Failed to parse error response:', e);
         }
-        
-        // For other errors, display the error message
-        const errorMsg = `Error: ${response.status} ${response.statusText}`;
-        console.error('MVP Content Generation Error:', errorMsg);
-        setGenerationError(errorMsg);
-        setMvpContent(null);
-        return;
+        throw new Error(errorMessage);
       }
 
-      // Process the successful response
       const data: MVPContentGenerationResponse = await response.json();
+      console.log('API Response:', data);
 
-      if (data.error) {
-        console.error('API returned error:', data.error);
-        setGenerationError(data.error);
-        setMvpContent(null);
-        return;
-      }
-
+      // Check if we got valid MVP content
       if (data.mvp_content) {
         setMvpContent(data.mvp_content);
         setCurrentStep('theme'); // Move to theme selection step on success
+      } else if (data.raw_ai_response) {
+        // If we have raw AI response but no parsed content, use it as fallback
+        console.warn('Using raw AI response as fallback');
+        return generateDemoContent(data.raw_ai_response);
       } else {
         // API returned success but no content - use fallback
         console.warn('API returned no MVP content. Using demo fallback data.');
