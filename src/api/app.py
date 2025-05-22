@@ -149,36 +149,77 @@ async def upload_resume(resume_file: UploadFile = File(...)):
     Returns:
         Parsed resume data and session ID
     """
+    logger.info(f"Received resume upload request for file: {resume_file.filename}")
+    
     # Validate file type
     if not resume_file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are supported")
+        error_msg = f"Invalid file type: {resume_file.filename}. Only PDF files are supported"
+        logger.error(error_msg)
+        raise HTTPException(status_code=400, detail=error_msg)
     
+    temp_file_path = None
     try:
         # Save uploaded file to temp directory
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
             temp_file_path = temp_file.name
             content = await resume_file.read()
+            if not content:
+                error_msg = f"Empty file: {resume_file.filename}"
+                logger.error(error_msg)
+                raise HTTPException(status_code=400, detail=error_msg)
             temp_file.write(content)
         
+        logger.info(f"Saved uploaded file to temp path: {temp_file_path}")
+        
         # Parse resume
-        resume_data = get_resume_json(temp_file_path)
+        try:
+            resume_data = get_resume_json(temp_file_path)
+            logger.info("Successfully parsed resume data")
+        except PDFParseError as e:
+            error_msg = f"Failed to parse PDF: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            raise HTTPException(status_code=400, detail=error_msg)
         
         # Generate session ID
         import uuid
         session_id = str(uuid.uuid4())
+        logger.info(f"Generated session ID: {session_id}")
         
-        # Clean up temp file
-        os.unlink(temp_file_path)
+        # Ensure we have at least some data
+        if not resume_data.get('contact', {}).get('name') and not resume_data.get('raw_text'):
+            logger.warning("No name or raw text extracted from resume")
+            if 'raw_text' not in resume_data:
+                resume_data['raw_text'] = "No text could be extracted from the PDF"
         
-        return ResumeUploadResponse(
+        # Include the original filename in the response for reference
+        resume_data['original_filename'] = resume_file.filename
+        
+        response = ResumeUploadResponse(
             session_id=session_id,
             resume_data=resume_data,
             message="Resume successfully parsed",
         )
-    except PDFParseError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        
+        logger.info(f"Successfully processed resume: {resume_file.filename}")
+        return response
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions as they are
+        raise
+        
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing resume: {str(e)}")
+        error_msg = f"Unexpected error processing resume: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        raise HTTPException(status_code=500, detail=error_msg)
+        
+    finally:
+        # Clean up temp file if it was created
+        if temp_file_path and os.path.exists(temp_file_path):
+            try:
+                os.unlink(temp_file_path)
+                logger.debug(f"Cleaned up temp file: {temp_file_path}")
+            except Exception as e:
+                logger.warning(f"Failed to clean up temp file {temp_file_path}: {str(e)}")
 
 
 @app.post("/generate-content", response_model=ContentGenerationResponse)

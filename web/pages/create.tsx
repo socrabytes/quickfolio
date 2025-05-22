@@ -524,11 +524,19 @@ ${link.type ? `  type = "${link.type}"` : ''}
           }
           
           const uploadData = await uploadResponse.json();
-          if (uploadData.resumeText) {
+          console.log('Upload response:', uploadData);
+          
+          // Check if we have resume data with raw text
+          if (uploadData.resume_data?.raw_text) {
             // If we successfully got text from the PDF, use it
-            return await generateMVPContent(uploadData.resumeText);
+            return await generateMVPContent(uploadData.resume_data.raw_text);
+          } else if (uploadData.resume_data) {
+            // If we have structured data but no raw text, convert it to a string
+            const resumeText = JSON.stringify(uploadData.resume_data, null, 2);
+            return await generateMVPContent(resumeText);
           }
-          throw new Error('Failed to extract text from PDF');
+          
+          throw new Error('No resume data found in response');
         } catch (error) {
           // If the PDF processing fails, we can use a fallback for demo purposes
           // In production, we should handle this more gracefully
