@@ -131,19 +131,90 @@ def parse_resume_pdf(pdf_path: Union[str, Path]) -> Dict[str, Any]:
     # Extract raw text from PDF
     text = extract_text_from_pdf(pdf_path)
     
-    # TODO: Implement structured parsing logic
-    # This is a placeholder that returns minimal structured data
-    # In a real implementation, we would use NLP or regex patterns
-    # to extract the various sections and fields
-    
-    # For now, return a minimal structure with the raw text
-    return {
+    # Initialize result dictionary
+    result = {
         "contact": {
-            "name": "Extracted Name",  # Placeholder
-            "email": "example@email.com",  # Placeholder
+            "name": "",
+            "email": "",
+            "phone": "",
+            "linkedin": "",
+            "github": ""
         },
-        "raw_text": text,
+        "summary": "",
+        "experience": [],
+        "education": [],
+        "skills": [],
+        "raw_text": text
     }
+    
+    # Extract name (first line that looks like a name)
+    import re
+    
+    # Try to extract name from the first few lines
+    name_match = re.search(r'^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)', text, re.MULTILINE)
+    if name_match:
+        result["contact"]["name"] = name_match.group(1).strip()
+    
+    # Extract email
+    email_match = re.search(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', text)
+    if email_match:
+        result["contact"]["email"] = email_match.group(0).strip()
+    
+    # Extract phone number
+    phone_match = re.search(r'(\+\d{1,3}[\s-]?)?\(?\d{3}\)?[\s-]?\d{3}[\s-]?\d{4}', text)
+    if phone_match:
+        result["contact"]["phone"] = phone_match.group(0).strip()
+    
+    # Extract LinkedIn and GitHub URLs
+    linkedin_match = re.search(r'linkedin\.com/in/[a-zA-Z0-9-]+', text, re.IGNORECASE)
+    if linkedin_match:
+        result["contact"]["linkedin"] = f"https://{linkedin_match.group(0)}"
+    
+    github_match = re.search(r'github\.com/[a-zA-Z0-9-]+', text, re.IGNORECASE)
+    if github_match:
+        result["contact"]["github"] = f"https://{github_match.group(0)}"
+    
+    # Extract skills (simple approach - look for common skills)
+    common_skills = [
+        'JavaScript', 'Python', 'Java', 'C++', 'React', 'Node\.js', 'TypeScript',
+        'HTML', 'CSS', 'SQL', 'MongoDB', 'PostgreSQL', 'AWS', 'Docker', 'Kubernetes',
+        'Git', 'REST', 'GraphQL', 'Redux', 'Vue\.js', 'Angular', 'Express'
+    ]
+    
+    found_skills = set()
+    for skill in common_skills:
+        if re.search(r'\b' + re.escape(skill) + r'\b', text, re.IGNORECASE):
+            found_skills.add(skill)
+    
+    result["skills"] = list(found_skills)
+    
+    # Extract experience (simplified)
+    exp_section = re.search(r'(?i)experience.*?(?=\n\n|$)', text, re.DOTALL)
+    if exp_section:
+        exp_text = exp_section.group(0)
+        # Simple extraction of job titles and companies
+        jobs = re.findall(r'([A-Z][^\n]+?)\n([A-Z\s&]+?)[\s\n]*\(?([^\n\)]+)\)?', exp_text, re.MULTILINE)
+        for title, company, period in jobs:
+            result["experience"].append({
+                "position": title.strip(),
+                "company": company.strip(),
+                "period": period.strip()
+            })
+    
+    # Extract education (simplified)
+    edu_section = re.search(r'(?i)education.*?(?=\n\n|$)', text, re.DOTALL)
+    if edu_section:
+        edu_text = edu_section.group(0)
+        # Simple extraction of degree and institution
+        educations = re.findall(r'([A-Z][^\n]+?)\n([A-Z\s&]+?)[\s\n]*\(?([^\n\)]+)\)?', edu_text, re.MULTILINE)
+        for degree, institution, period in educations:
+            result["education"].append({
+                "degree": degree.strip(),
+                "institution": institution.strip(),
+                "period": period.strip()
+            })
+    
+    return result
 
 
 def get_resume_json(pdf_path: Union[str, Path]) -> Dict[str, Any]:
