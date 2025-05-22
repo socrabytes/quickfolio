@@ -140,7 +140,50 @@ const Create: NextPage<CreateProps> = () => {
         repoName
       }));
     }
-  }, [setFormState, setSelectedRepoFullName]);
+  }, []);
+
+  // Validate repository and get its ID
+  const validateAndGetRepoId = useCallback(async (repoFullName: string, githubUsername: string) => {
+    try {
+      setIsRepoValidating(true);
+      setRepoValidationError(null);
+      
+      const apiUrlBase = process.env.NEXT_PUBLIC_API_URL || '';
+      const response = await fetch(`${apiUrlBase}/api/github/validate-repository`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ repoFullName, githubUsername }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Failed to validate repository. Please check the name and your permissions.' }));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      if (data.repositoryId) {
+        setGithubRepoId(data.repositoryId); 
+        const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://quickfolio.onrender.com';
+        const redirectUri = `${currentOrigin}/create`;
+        setGithubAppInstallUrl(`https://github.com/apps/quickfolio/installations/new?repository_ids[]=${data.repositoryId}&redirect_uri=${encodeURIComponent(redirectUri)}`);
+        setRepoValidationError(null); // Clear any error
+        return true;
+      } else {
+        throw new Error('Repository ID not found in response.');
+      }
+    } catch (error: any) {
+      console.error('Repository validation error:', error);
+      setRepoValidationError(error.message || 'An unexpected error occurred during repository validation.');
+      // Optionally, reset to generic install URL or keep it, based on desired UX
+      setGithubAppInstallUrl('https://github.com/apps/quickfolio/installations/new');
+      setGithubRepoId(null);
+      return false;
+    } finally {
+      setIsRepoValidating(false);
+    }
+  }, []);
 
   // Handle GitHub App installation
   const handleInstallApp = useCallback(() => {
@@ -439,47 +482,6 @@ const Create: NextPage<CreateProps> = () => {
     </div>
   );
 };
-
-// Helper functions that should be outside the component
-const validateAndGetRepoId = async (repoFullName: string, githubUsername: string) => {
-  try {
-    setIsRepoValidating(true);
-    setRepoValidationError(null);
-      const apiUrlBase = process.env.NEXT_PUBLIC_API_URL || '';
-      const response = await fetch(`${apiUrlBase}/api/github/validate-repository`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // Include Authorization header if your API requires it (e.g., JWT token)
-          // 'Authorization': `Bearer ${yourAuthToken}`,
-        },
-        body: JSON.stringify({ repoFullName, githubUsername }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: 'Failed to validate repository. Please check the name and your permissions.' }));
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      if (data.repositoryId) {
-        setGithubRepoId(data.repositoryId); 
-        const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://quickfolio.onrender.com';
-        const redirectUri = `${currentOrigin}/create`;
-        setGithubAppInstallUrl(`https://github.com/apps/quickfolio/installations/new?repository_ids[]=${data.repositoryId}&redirect_uri=${encodeURIComponent(redirectUri)}`);
-        setRepoValidationError(null); // Clear any error
-      } else {
-        throw new Error('Repository ID not found in response.');
-      }
-    } catch (error: any) {
-      console.error('Repository validation error:', error);
-      setRepoValidationError(error.message || 'An unexpected error occurred during repository validation.');
-      // Optionally, reset to generic install URL or keep it, based on desired UX
-      setGithubAppInstallUrl('https://github.com/apps/quickfolio/installations/new');
-      setGithubRepoId(null);
-    }
-    setIsRepoValidating(false);
-  };
 
   // Handle deployment
   const handleDeploy = useCallback(async () => {
