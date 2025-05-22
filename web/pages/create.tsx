@@ -490,86 +490,87 @@ ${link.type ? `  type = "${link.type}"` : ''}
     
     setIsGenerating(true);
     setGenerationError(null);
-    setUploadError(null); // Clear previous errors
+    setUploadError(null);
+    setMvpContent(null);
     
-    // If PDF file is provided but no text, process the file
-    if (formState.resumeFile) {
-      try {
-        // For now, in the MVP, let's use a mock text extraction as a fallback
-        // In the future, this should properly extract text from the PDF via the backend
-        
-        // If we also have text input, use that instead of extracting from PDF
-        if (formState.resumeText.trim()) {
-          return await generateMVPContent(formState.resumeText);
-        }
-        
-        // In a production environment, we would extract text from the PDF
-        // For MVP demo purposes, we'll use a reasonable fallback
-        try {
-          // Create FormData for file upload
-          const formData = new FormData();
-          formData.append('resume_file', formState.resumeFile);
-          
-          // Try to call the API endpoint that handles PDF processing
-          // Use environment variable for API URL
-          const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || '';
-          console.log(`Using API base URL: ${apiBaseUrl || 'relative path'} for resume upload`);
-          const uploadResponse = await fetch(`${apiBaseUrl}/upload-resume`, {
-            method: 'POST',
-            body: formData,
-            credentials: 'include',  // Include credentials (cookies, HTTP authentication)
-            headers: {
-              // Don't set Content-Type manually when using FormData
-              // The browser will set it automatically with the correct boundary
-            },
-            mode: 'cors',  // Enable CORS mode
-          });
-          
-          if (!uploadResponse.ok) {
-            throw new Error(`PDF upload failed: ${uploadResponse.status} ${uploadResponse.statusText}`);
-          }
-          
-          const uploadData = await uploadResponse.json();
-          console.log('Upload response:', uploadData);
-          
-          // Check if we have resume data with raw text
-          if (uploadData.resume_data?.raw_text) {
-            // If we successfully got text from the PDF, use it
-            return await generateMVPContent(uploadData.resume_data.raw_text);
-          } else if (uploadData.resume_data) {
-            // If we have structured data but no raw text, convert it to a string
-            const resumeText = JSON.stringify(uploadData.resume_data, null, 2);
-            return await generateMVPContent(resumeText);
-          }
-          
-          throw new Error('No resume data found in response');
-        } catch (error) {
-          // If the PDF processing fails, we can use a fallback for demo purposes
-          // In production, we should handle this more gracefully
-          console.warn('PDF extraction failed, using filename as fallback name:', error);
-          
-          // Use the filename (without extension) as a fallback name for demos
-          const fileName = formState.resumeFile.name.replace(/\.pdf$/i, '');
-          const demoText = `Name: ${fileName}\nTitle: Software Developer\nExperience: 5 years of software development\nSkills: JavaScript, React, Node.js\nEducation: Computer Science degree\nContact: example@email.com\nLinkedIn: linkedin.com/in/${fileName.toLowerCase().replace(/\s+/g, '-')}\nGitHub: github.com/${fileName.toLowerCase().replace(/\s+/g, '')}\nPortfolio: ${fileName.toLowerCase().replace(/\s+/g, '')}.dev`;
-          
-          await generateMVPContent(demoText);
-          // After content generation, go to theme selection
-          setCurrentStep('theme');
-        }
-      } catch (error) {
-        console.error('Error processing PDF:', error);
-        setUploadError(`Failed to process PDF: ${error instanceof Error ? error.message : String(error)}`);
-        setIsGenerating(false);
+    try {
+      // If we have text input, use that directly
+      if (formState.resumeText.trim()) {
+        console.log('Using text input for content generation');
+        await generateMVPContent(formState.resumeText);
         return;
       }
+      
+      // If we have a file but no text, process the file
+      if (formState.resumeFile) {
+        console.log('Processing resume file:', formState.resumeFile.name);
+        
+        // Create FormData for file upload
+        const formData = new FormData();
+        formData.append('resume_file', formState.resumeFile);
+        
+        // Get API base URL from environment variables
+        const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || '';
+        console.log(`Uploading resume to: ${apiBaseUrl || 'relative path'}/upload-resume`);
+        
+        // Upload the resume file to the backend
+        const uploadResponse = await fetch(`${apiBaseUrl}/upload-resume`, {
+          method: 'POST',
+          body: formData,
+          credentials: 'include',
+          mode: 'cors',
+        });
+        
+        // Check if the upload was successful
+        if (!uploadResponse.ok) {
+          let errorMessage = `Upload failed: ${uploadResponse.status} ${uploadResponse.statusText}`;
+          try {
+            const errorData = await uploadResponse.json();
+            errorMessage = errorData.detail || errorData.message || errorMessage;
+          } catch (e) {
+            console.error('Failed to parse error response:', e);
+          }
+          throw new Error(errorMessage);
+        }
+        
+        // Parse the successful response
+        const uploadData = await uploadResponse.json();
+        console.log('Resume upload successful:', uploadData);
+        
+        // Extract resume text from the response
+        let resumeText = '';
+        if (uploadData.resume_data?.raw_text) {
+          resumeText = uploadData.resume_data.raw_text;
+        } else if (uploadData.resume_data) {
+          // If we have structured data but no raw text, convert it to a string
+          resumeText = JSON.stringify(uploadData.resume_data, null, 2);
+        } else {
+          throw new Error('No resume data found in response');
+        }
+        
+        // Generate MVP content from the extracted text
+        await generateMVPContent(resumeText);
+        return;
+      }
+      
+      // If we get here, there's no file or text to process
+      setUploadError('Please upload a resume file or enter your information');
+      setIsGenerating(false);
+      
+    } catch (error) {
+      console.error('Error during resume processing:', error);
+      
+      // Set appropriate error message
+      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+      setUploadError(`Failed to process resume: ${errorMessage}`);
+      
+      // For demo purposes, fall back to demo content
+      console.warn('Falling back to demo content due to error');
+      const demoText = `Name: Demo User\nTitle: Software Developer\nExperience: 5 years of software development\nSkills: JavaScript, React, Node.js\nEducation: Computer Science degree\nContact: demo@example.com\nLinkedIn: linkedin.com/in/demo\nGitHub: github.com/demo`;
+      await generateMVPContent(demoText);
     }
-
-    // For text input, use the content directly
-    await generateMVPContent(formState.resumeText);
-    // After content generation, go to theme selection
-    setCurrentStep('theme');
   };
-
+  
   /**
    * Makes API call to generate MVP content from resume text
    * @param resumeText - The resume text to process
