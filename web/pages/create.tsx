@@ -508,7 +508,7 @@ ${link.type ? `  type = "${link.type}"` : ''}
         try {
           // Create FormData for file upload
           const formData = new FormData();
-          formData.append('file', formState.resumeFile);
+          formData.append('resume_file', formState.resumeFile);
           
           // Try to call the API endpoint that handles PDF processing
           // Use environment variable for API URL
