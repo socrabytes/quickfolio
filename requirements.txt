@@ -8,7 +8,7 @@ google-generativeai==0.3.1
 # Web framework
 fastapi==0.109.0
 uvicorn[standard]==0.27.0 # Ensures all optional uvicorn deps are included
-python-multipart==0.0.9
+python-multipart==0.0.18
 
 # GitHub integration
 PyGithub==2.2.0
@@ -19,7 +19,7 @@ cryptography # RSA signing for JWTs
 # Utils
 pydantic==2.5.3
 python-dotenv==1.0.1
-requests==2.31.0
+requests==2.32.4
 
 # Testing
 pytest==7.4.3
